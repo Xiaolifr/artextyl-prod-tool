@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Artextyl — Import Production Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f5f4f1;--surf:#fff;--border:#e4e1da;--border2:#edeae3;
+  --text:#1a1916;--t2:#6b6860;--t3:#a09e98;
+  --green:#059669;--gbg:#f0fdf4;--gbd:#bbf7d0;
+  --blue:#1d4ed8;--bbg:#eff6ff;--bbd:#bfdbfe;
+  --amber:#d97706;--abg:#fffbeb;--abd:#fcd34d;
+  --red:#dc2626;--rbg:#fef2f2;
+  --r:12px;--rs:8px;--shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.05);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:14px;color:var(--text);min-height:100vh}
+
+/* TOP BAR */
+.topbar{background:var(--surf);border-bottom:1px solid var(--border);height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;position:sticky;top:0;z-index:200;box-shadow:var(--shadow)}
+.tlogo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;letter-spacing:-.3px}
+.ticon{width:30px;height:30px;background:#1a1916;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:800}
+.tright{display:flex;align-items:center;gap:8px}
+.tbadge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:#f0f0ed;color:var(--t2)}
+.tbtn{background:none;border:1px solid var(--border);border-radius:var(--rs);padding:5px 11px;font-size:12px;color:var(--t2);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:5px}
+.tbtn:hover{background:var(--bg);color:var(--text)}
+
+/* API BANNER */
+.api-banner{background:var(--abg);border-bottom:1px solid var(--abd);padding:9px 1.5rem;display:none;align-items:center;gap:10px;flex-wrap:wrap}
+.api-banner label{font-size:12px;font-weight:600;white-space:nowrap;color:var(--text)}
+.api-banner input{flex:1;min-width:200px;max-width:380px;padding:6px 10px;border:1px solid var(--abd);border-radius:var(--rs);font-size:12px;font-family:monospace;background:#fff}
+.api-banner input:focus{outline:none;border-color:var(--amber)}
+.api-hint{font-size:11px;color:var(--t2)}
+.api-ok{color:var(--green);font-size:11px;font-weight:600;display:none}
+
+/* LAYOUT */
+.wrap{max-width:860px;margin:0 auto;padding:1.5rem 1.25rem}
+
+/* FLOW BAR */
+.flow{display:flex;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:1.5rem;background:var(--surf);box-shadow:var(--shadow)}
+.fs{flex:1;padding:12px 14px;border-right:1px solid var(--border)}
+.fs:last-child{border-right:none}
+.ftag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;border-radius:20px;margin-bottom:5px}
+.tm{background:#f0f0ed;color:var(--t2)}
+.tp{background:var(--gbg);color:var(--green);border:1px solid var(--gbd)}
+.tc{background:var(--bbg);color:var(--blue);border:1px solid var(--bbd)}
+.ftitle{font-size:12px;font-weight:700;margin-bottom:3px}
+.fcols{font-size:11px;color:var(--t2);line-height:1.6}
+
+/* TABS */
+.tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:1.25rem;gap:0}
+.tab{padding:9px 18px;font-size:13px;font-weight:500;cursor:pointer;background:none;border:none;color:var(--t2);border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:7px;transition:all .15s;white-space:nowrap}
+.tab:hover{color:var(--text);background:rgba(0,0,0,.02)}
+.tab.active{color:var(--text);border-bottom-color:var(--text);font-weight:600}
+.snum{width:19px;height:19px;border-radius:50%;background:var(--border);color:var(--t2);font-size:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
+.tab.active .snum{background:var(--text);color:#fff}
+.section{display:none}.section.active{display:block}
+
+/* CARDS */
+.card{background:var(--surf);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow)}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.card-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px}
+
+/* UPLOAD AREA */
+.upload-section{margin-bottom:1rem}
+.upload-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);margin-bottom:8px}
+.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.upload-grid.cols3{grid-template-columns:1fr 1fr 1fr}
+.upload-grid.full{grid-template-columns:1fr}
+
+/* FILE SLOT */
+.fslot{position:relative;border:1.5px dashed var(--border);border-radius:var(--rs);padding:14px 12px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:10px;min-height:60px;background:#fafaf8}
+.fslot:hover{border-color:#aaa;background:#f5f5f2}
+.fslot.has-file{border-style:solid;border-color:var(--green);background:var(--gbg)}
+.fslot.has-file .fslot-icon{color:var(--green)}
+.fslot input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.fslot-icon{font-size:22px;flex-shrink:0;color:var(--t3);transition:color .2s}
+.fslot-info{flex:1;min-width:0}
+.fslot-label{font-size:12px;font-weight:600;color:var(--text)}
+.fslot-sub{font-size:10px;color:var(--t3)}
+.fslot-name{font-size:11px;font-weight:500;color:var(--green);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.fslot-clear{position:absolute;top:6px;right:8px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.1);border:none;cursor:pointer;display:none;align-items:center;justify-content:center;font-size:10px;color:#fff;z-index:10;line-height:1}
+.fslot.has-file .fslot-clear{display:flex}
+
+/* MULTI-PFI */
+.pfi-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.pfi-item{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--gbg);border:1px solid var(--gbd);border-radius:var(--rs);font-size:12px}
+.pfi-item-name{flex:1;font-weight:500;color:var(--green);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pfi-item-size{color:var(--t3);white-space:nowrap}
+.pfi-item-del{background:none;border:none;cursor:pointer;color:var(--t3);font-size:14px;padding:2px 4px;border-radius:4px;transition:all .15s;line-height:1}
+.pfi-item-del:hover{background:var(--rbg);color:var(--red)}
+.add-pfi-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border:1.5px dashed var(--border);border-radius:var(--rs);background:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--t2);width:100%;transition:all .15s}
+.add-pfi-btn:hover{border-color:var(--green);color:var(--green);background:var(--gbg)}
+.add-pfi-input{display:none}
+
+/* CONFIG */
+.cfg{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--abg);border:1px solid var(--abd);border-radius:var(--rs);margin-bottom:1rem;flex-wrap:wrap}
+.cfg label{font-size:12px;font-weight:600;white-space:nowrap}
+.cfg input[type=number]{width:65px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;text-align:center}
+.cfg-hint{font-size:11px;color:var(--t2);flex:1}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;border-radius:var(--rs);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;white-space:nowrap}
+.btn-full{width:100%}
+.btn-dark{background:var(--text);color:#fff}
+.btn-dark:hover{opacity:.85}
+.btn-dark:disabled{opacity:.3;cursor:not-allowed}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:hover{opacity:.85}
+.btn-green:disabled{opacity:.3;cursor:not-allowed}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--text)}
+.btn-ghost:hover{background:var(--bg)}
+.btn-red{background:none;border:1px solid #fca5a5;color:var(--red)}
+.btn-red:hover{background:var(--rbg)}
+.brow{display:flex;gap:8px;margin-top:1rem}
+.brow .btn{flex:1}
+
+/* STATUS */
+.status{display:none;align-items:center;gap:9px;padding:10px 14px;border-radius:var(--rs);font-size:13px;margin-bottom:1rem}
+.status.show{display:flex}
+.s-info{background:var(--bbg);color:var(--blue)}
+.s-ok{background:var(--gbg);color:var(--green)}
+.s-err{background:var(--rbg);color:var(--red)}
+.spin{width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* RESULTS */
+.result{display:none}.result.show{display:block}
+.sep{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin:1.25rem 0 .75rem;display:flex;align-items:center;gap:8px}
+.sep::after{content:'';flex:1;height:1px;background:var(--border2)}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.5rem}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.fval{font-size:13px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);width:100%}
+.fval.pfi{background:var(--gbg);border-color:var(--gbd)}
+.fval.ci{background:var(--bbg);border-color:var(--bbd)}
+
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:.75rem}
+.leg{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2)}
+.legbox{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+.lp{background:var(--gbg);border:1px solid var(--gbd)}
+.lc{background:var(--bbg);border:1px solid var(--bbd)}
+.lm{background:var(--bg);border:1px solid var(--border)}
+
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:6px 8px;font-weight:600;color:var(--t2);border-bottom:1px solid var(--border);background:var(--bg);font-size:11px}
+td{padding:6px 8px;border-bottom:1px solid var(--border2);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+td.pc{background:#f0fdf4}
+td.cc{background:#eff6ff}
+
+.bdg{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600}
+.b-ok{background:var(--gbg);color:var(--green)}
+.b-warn{background:var(--abg);color:var(--amber)}
+.b-err{background:var(--rbg);color:var(--red)}
+.b-neu{background:var(--bg);color:var(--t2);border:1px solid var(--border)}
+
+.sumbox{padding:12px 14px;border-radius:var(--rs);background:var(--gbg);border:1px solid var(--gbd);font-size:13px;margin-bottom:1rem}
+.sumbox strong{color:var(--green)}
+.dbgbox{margin-top:8px;padding:8px 10px;background:#f8f7f4;border-radius:6px;font-size:10px;font-family:monospace;color:var(--t2);max-height:120px;overflow-y:auto;line-height:1.7}
+
+.chklist{display:flex;flex-direction:column;gap:5px}
+.chkrow{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--bg);border-radius:6px;font-size:12px}
+
+/* MULTI-RESULT TABS */
+.rtabs{display:flex;gap:4px;margin-bottom:1rem;flex-wrap:wrap}
+.rtab{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--bg);color:var(--t2);transition:all .15s}
+.rtab.active{background:var(--text);color:#fff;border-color:var(--text)}
+
+/* HISTORY */
+.hist-empty{text-align:center;padding:2rem;color:var(--t3)}
+
+@media(max-width:580px){
+  .upload-grid,.upload-grid.cols3,.fgrid{grid-template-columns:1fr}
+  .flow{flex-direction:column}
+  .fs{border-right:none;border-bottom:1px solid var(--border)}
+  .brow{flex-direction:column}
+  .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
+</style>
+</head>
+<body>
+
+
+<!-- CONFIRMATION MODAL -->
+<div id="confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:2rem;max-width:480px;width:90%;box-shadow:0 25px 50px rgba(0,0,0,.3)">
+    <div style="font-size:13px;font-weight:700;color:var(--amber);margin-bottom:8px;display:flex;align-items:center;gap:6px">⚠️ Correspondance incertaine</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:1rem">Est-ce la même chose ?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1.25rem">
+      <div style="padding:10px 12px;background:var(--gbg);border:1px solid var(--gbd);border-radius:8px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--green);margin-bottom:6px">Dans votre Excel</div>
+        <div id="confirm-excel" style="font-size:13px;font-weight:600;line-height:1.5"></div>
+      </div>
+      <div style="padding:10px 12px;background:var(--bbg);border:1px solid var(--bbd);border-radius:8px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--blue);margin-bottom:6px">Dans le PFI</div>
+        <div id="confirm-pfi" style="font-size:13px;font-weight:600;line-height:1.5"></div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:1rem" id="confirm-hint"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="confirmAnswer(false)" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;background:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--red)">✕ Non — Sauter</button>
+      <button onclick="confirmAnswer(true)" style="flex:1;padding:10px;background:var(--text);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">✓ Oui — Remplir</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="tlogo">
+    <div class="ticon">A</div>
+    Artextyl — Import Production Tool
+  </div>
+  <div class="tright">
+    <button class="tbtn" onclick="toggleApi()" title="Clé API Claude">⚙️ API</button>
+    <div class="tbadge">Xiaoli</div>
+  </div>
+</div>
+
+<!-- API BANNER -->
+<div class="api-banner" id="api-banner">
+  <label>🔑 Clé API Claude :</label>
+  <input type="password" id="api-key" placeholder="sk-ant-api03-..."
+    oninput="onKeyInput()" autocomplete="off">
+  <span class="api-hint">→ <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> · API Keys · Create Key — stockée dans votre navigateur</span>
+  <span class="api-ok" id="api-ok">✓ Clé enregistrée</span>
+</div>
+
+<div class="wrap">
+
+  <!-- FLOW -->
+  <div class="flow">
+    <div class="fs">
+      <div class="ftag tm">Vous — Manuel</div>
+      <div class="ftitle">Saisie Excel</div>
+      <div class="fcols">REF · COLOR · GENDER<br>CODE FRS · N° PI · BOOKING</div>
+    </div>
+    <div class="fs">
+      <div class="ftag tp">IA — PFI</div>
+      <div class="ftitle">Proforma Invoice</div>
+      <div class="fcols">QTY PFI · PRICE FINAL<br>TOTAUX · REGLEMENT · ETD</div>
+    </div>
+    <div class="fs" style="border-right:none">
+      <div class="ftag tc">IA — CI / BL / PL</div>
+      <div class="ftitle">Shipping Docs</div>
+      <div class="fcols">QTY FINAL · N° CI<br>ETD FINAL · ETA · MONTANT</div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="goTab('pfi')"><span class="snum">1</span> PFI — Proforma Invoice</button>
+    <button class="tab" onclick="goTab('ci')"><span class="snum">2</span> CI / BL / PL</button>
+    <button class="tab" onclick="goTab('hist')"><span class="snum" style="background:#e5e2db">↺</span> Historique</button>
+  </div>
+
+  <!-- ══════ TAB PFI ══════ -->
+  <div id="tab-pfi" class="section active">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">📄 Charger les PFI + tableau Excel</div>
+        <button class="btn btn-red" onclick="resetAll('pfi')" style="font-size:11px;padding:5px 10px">🗑 Vider tout</button>
+      </div>
+
+      <!-- MULTI PFI -->
+      <div class="upload-section">
+        <div class="upload-label">PFI — Proforma Invoice(s) · PDF recommandé · plusieurs fichiers acceptés</div>
+        <div class="pfi-list" id="pfi-list"></div>
+        <button class="add-pfi-btn" onclick="document.getElementById('pfi-input').click()">
+          ＋ Ajouter un PFI
+        </button>
+        <input type="file" id="pfi-input" class="add-pfi-input" accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" multiple onchange="addPFIs(this)">
+      </div>
+
+      <!-- EXCEL -->
+      <div class="upload-section">
+        <div class="upload-label">Tableau de production (IM5) · .xlsx uniquement</div>
+        <div class="pfi-list" id="excel-pfi-list"></div>
+        <button class="add-pfi-btn" id="add-excel-pfi-btn" onclick="document.getElementById('excel-pfi-input').click()">
+          📊 Charger le tableau Excel
+        </button>
+        <input type="file" id="excel-pfi-input" class="add-pfi-input" accept=".xlsx,.xls" onchange="setExcelFile(this,'excelPfi','excel-pfi-list','add-excel-pfi-btn')">
+      </div>
+
+      <div class="cfg">
+        <span>⚙️</span>
+        <label>Colonne QTY PFI :</label>
+        <input type="number" id="col-pfi" placeholder="16" min="1" max="100" value="16">
+        <span class="cfg-hint">P=16 par défaut si vous avez ajouté cette colonne. Laissez vide sinon.</span>
+      </div>
+
+      <div class="cfg" style="background:#eff6ff;border-color:#bfdbfe">
+        <span>📄</span>
+        <label>PFI volumineux ?</label>
+        <input type="number" id="pages-per-batch" placeholder="ex: 2" min="1" max="20" value="" style="width:65px">
+        <span class="cfg-hint">Indiquez le nombre de pages par lot (ex: 2 = traite 2 pages à la fois). Laissez vide pour traiter tout le PDF en une fois.</span>
+      </div>
+
+      <button class="btn btn-dark btn-full" id="btn-pfi" onclick="runPFI()" disabled>
+        ✨ Extraire et mettre à jour IM5
+      </button>
+    </div>
+
+    <div class="status" id="st-pfi"></div>
+    <div class="result" id="res-pfi">
+      <!-- multi-result tabs injected here -->
+    </div>
+  </div>
+
+  <!-- ══════ TAB CI ══════ -->
+  <div id="tab-ci" class="section">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">🚢 Charger les documents shipping + tableau Excel</div>
+        <button class="btn btn-red" onclick="resetAll('ci')" style="font-size:11px;padding:5px 10px">🗑 Vider tout</button>
+      </div>
+
+      <div class="upload-section">
+        <div class="upload-label">Documents shipping</div>
+        <div class="upload-grid">
+          <div class="fslot" id="dz-ci" onclick="pickFile('f-ci')">
+            <input type="file" id="f-ci" accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" onchange="slotFile(this,'dz-ci','ci')">
+            <div class="fslot-icon">🧾</div>
+            <div class="fslot-info">
+              <div class="fslot-label">CI — Commercial Invoice</div>
+              <div class="fslot-sub">.xlsx · .pdf · image</div>
+              <div class="fslot-name" id="fn-ci"></div>
+            </div>
+            <button class="fslot-clear" onclick="clearSlot(event,'dz-ci','f-ci','fn-ci','ci')">✕</button>
+          </div>
+          <div class="fslot" id="dz-pl" onclick="pickFile('f-pl')">
+            <input type="file" id="f-pl" accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" onchange="slotFile(this,'dz-pl','pl')">
+            <div class="fslot-icon">📋</div>
+            <div class="fslot-info">
+              <div class="fslot-label">PL — Packing List</div>
+              <div class="fslot-sub">.xlsx · .pdf · image</div>
+              <div class="fslot-name" id="fn-pl"></div>
+            </div>
+            <button class="fslot-clear" onclick="clearSlot(event,'dz-pl','f-pl','fn-pl','pl')">✕</button>
+          </div>
+          <div class="fslot" id="dz-bl" onclick="pickFile('f-bl')">
+            <input type="file" id="f-bl" accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" onchange="slotFile(this,'dz-bl','bl')">
+            <div class="fslot-icon">🚢</div>
+            <div class="fslot-info">
+              <div class="fslot-label">BL — Bill of Lading</div>
+              <div class="fslot-sub">.xlsx · .pdf · image</div>
+              <div class="fslot-name" id="fn-bl"></div>
+            </div>
+            <button class="fslot-clear" onclick="clearSlot(event,'dz-bl','f-bl','fn-bl','bl')">✕</button>
+          </div>
+          <div class="fslot" id="dz-wn" onclick="pickFile('f-wn')">
+            <input type="file" id="f-wn" accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" onchange="slotFile(this,'dz-wn','wn')">
+            <div class="fslot-icon">⚖️</div>
+            <div class="fslot-info">
+              <div class="fslot-label">Weight Note</div>
+              <div class="fslot-sub">.xlsx · .pdf · image</div>
+              <div class="fslot-name" id="fn-wn"></div>
+            </div>
+            <button class="fslot-clear" onclick="clearSlot(event,'dz-wn','f-wn','fn-wn','wn')">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="upload-section">
+        <div class="upload-label">Tableau de production (IM5) · .xlsx uniquement</div>
+        <div class="pfi-list" id="excel-ci-list"></div>
+        <button class="add-pfi-btn" id="add-excel-ci-btn" onclick="document.getElementById('excel-ci-input').click()">
+          📊 Charger le tableau Excel
+        </button>
+        <input type="file" id="excel-ci-input" class="add-pfi-input" accept=".xlsx,.xls" onchange="setExcelFile(this,'excelCi','excel-ci-list','add-excel-ci-btn')">
+      </div>
+
+      <div class="cfg">
+        <span>⚙️</span>
+        <label>Colonne QTY PFI :</label>
+        <input type="number" id="col-ci" placeholder="16" min="1" max="100" value="16">
+        <span class="cfg-hint">Même numéro qu'à l'étape 1.</span>
+      </div>
+
+      <button class="btn btn-dark btn-full" id="btn-ci" onclick="runCI()" disabled>
+        ✨ Extraire CI/BL/PL et compléter IM5
+      </button>
+    </div>
+
+    <div class="status" id="st-ci"></div>
+    <div class="result" id="res-ci"></div>
+  </div>
+
+  <!-- ══════ HISTORIQUE ══════ -->
+  <div id="tab-hist" class="section">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">📋 Dossiers traités</div>
+        <button class="btn btn-ghost" onclick="clearHist()" style="font-size:11px;padding:5px 10px">Effacer</button>
+      </div>
+      <table>
+        <thead><tr><th>Heure</th><th>Type</th><th>N° PI / Booking</th><th>Fournisseur</th><th>Articles</th><th>Montant</th><th>Lignes IM5</th></tr></thead>
+        <tbody id="hist-body"><tr><td colspan="7" class="hist-empty">Aucun dossier traité</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+const F = {}; // file store
+const pfiFiles = []; // array of {file, id}
+const blobs = {};
+let pfiCounter = 0;
+let histFirst = true;
+
+// ══════════════════════════════════════════
+// API KEY
+// ══════════════════════════════════════════
+function toggleApi(){
+  const b = document.getElementById('api-banner');
+  b.style.display = b.style.display === 'flex' ? 'none' : 'flex';
+}
+function onKeyInput(){
+  const k = document.getElementById('api-key').value.trim();
+  const ok = k.startsWith('sk-ant');
+  document.getElementById('api-ok').style.display = ok ? 'inline' : 'none';
+  if(ok) localStorage.setItem('artextyl_api_key', k);
+  checkBtns();
+}
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem('artextyl_api_key');
+  if(saved){
+    document.getElementById('api-key').value = saved;
+    document.getElementById('api-ok').style.display = 'inline';
+    document.getElementById('api-banner').style.display = 'none';
+  } else {
+    document.getElementById('api-banner').style.display = 'flex';
+  }
+  checkBtns();
+});
+
+// ══════════════════════════════════════════
+// UI HELPERS
+// ══════════════════════════════════════════
+function goTab(id){
+  ['pfi','ci','hist'].forEach((t,i)=>{
+    document.querySelectorAll('.tab')[i].classList.toggle('active', t===id);
+    document.getElementById('tab-'+t).classList.toggle('active', t===id);
+  });
+}
+
+function pickFile(id){
+  event.stopPropagation();
+  document.getElementById(id).click();
+}
+
+function slotFile(input, dzId, key){
+  const f = input.files[0];
+  if(!f) return;
+  F[key] = f;
+  const dz = document.getElementById(dzId);
+  dz.classList.add('has-file');
+  const fn = dz.querySelector('.fslot-name');
+  if(fn) fn.textContent = f.name;
+  checkBtns();
+}
+
+function clearSlot(e, dzId, inputId, fnId, key){
+  e.stopPropagation();
+  e.preventDefault();
+  delete F[key];
+  const dz = document.getElementById(dzId);
+  dz.classList.remove('has-file');
+  const fn = document.getElementById(fnId);
+  if(fn) fn.textContent = '';
+  document.getElementById(inputId).value = '';
+  checkBtns();
+}
+
+// MULTI PFI
+function addPFIs(input){
+  const files = Array.from(input.files);
+  files.forEach(f => {
+    const id = 'pfi_' + (++pfiCounter);
+    pfiFiles.push({file:f, id});
+    renderPFIItem(f, id);
+  });
+  input.value = ''; // reset so same file can be re-added
+  checkBtns();
+}
+
+function renderPFIItem(f, id){
+  const list = document.getElementById('pfi-list');
+  const size = f.size > 1024*1024 ? (f.size/1024/1024).toFixed(1)+'MB' : (f.size/1024).toFixed(0)+'KB';
+  const div = document.createElement('div');
+  div.className = 'pfi-item';
+  div.id = 'pfi-item-'+id;
+  div.innerHTML = `<span style="font-size:16px">${f.name.endsWith('.pdf')?'📄':'📋'}</span>
+    <span class="pfi-item-name">${f.name}</span>
+    <span class="pfi-item-size">${size}</span>
+    <button class="pfi-item-del" onclick="removePFI('${id}')" title="Supprimer">✕</button>`;
+  list.appendChild(div);
+}
+
+function removePFI(btn){
+  const id = typeof btn === 'string' ? btn : btn.dataset.id;
+  const idx = pfiFiles.findIndex(p=>p.id===id);
+  if(idx>=0) pfiFiles.splice(idx,1);
+  const el = document.getElementById('pfi-item-'+id);
+  if(el) el.remove();
+  checkBtns();
+}
+
+// Excel file upload (single, button style like PFI)
+function setExcelFile(input, key, listId, btnId){
+  const f = input.files[0];
+  if(!f) return;
+  F[key] = f;
+  // Show file item
+  const list = document.getElementById(listId);
+  const btn = document.getElementById(btnId);
+  const size = f.size > 1024*1024 ? (f.size/1024/1024).toFixed(1)+'MB' : (f.size/1024).toFixed(0)+'KB';
+  list.innerHTML = `<div class="pfi-item">
+    <span style="font-size:16px">📊</span>
+    <span class="pfi-item-name">${f.name}</span>
+    <span class="pfi-item-size">${size}</span>
+    <button class="pfi-item-del" onclick="clearExcel('${key}','${listId}','${btnId}','${input.id}')" title="Supprimer">✕</button>
+  </div>`;
+  btn.style.display = 'none';
+  input.value = '';
+  checkBtns();
+}
+function clearExcel(key, listId, btnId, inputId){
+  delete F[key];
+  const list = document.getElementById(listId);
+  if(list) list.innerHTML = '';
+  const btn = document.getElementById(btnId);
+  if(btn) btn.style.display = '';
+  const inp = document.getElementById(inputId);
+  if(inp) inp.value = '';
+  checkBtns();
+}
+
+function checkBtns(){
+  const hasKey = (localStorage.getItem('artextyl_api_key')||'').startsWith('sk-ant');
+  document.getElementById('btn-pfi').disabled = !(pfiFiles.length > 0 && F.excelPfi && hasKey);
+  const hasShip = F.ci || F.pl || F.bl || F.wn;
+  document.getElementById('btn-ci').disabled = !(hasShip && F.excelCi && hasKey);
+}
+
+function resetAll(type){
+  if(type === 'pfi'){
+    pfiFiles.length = 0;
+    document.getElementById('pfi-list').innerHTML = '';
+    clearExcel('excelPfi','excel-pfi-list','add-excel-pfi-btn','excel-pfi-input');
+    document.getElementById('res-pfi').innerHTML = '';
+    document.getElementById('res-pfi').classList.remove('show');
+    hideSt('st-pfi');
+  } else {
+    ['ci','pl','bl','wn'].forEach(k=>{
+      delete F[k];
+      const dz=document.getElementById('dz-'+k);
+      if(dz) dz.classList.remove('has-file');
+      const fn=document.getElementById('fn-'+k);
+      if(fn) fn.textContent='';
+      const fi=document.getElementById('f-'+k);
+      if(fi) fi.value='';
+    });
+    clearExcel('excelCi','excel-ci-list','add-excel-ci-btn','excel-ci-input');
+    document.getElementById('res-ci').innerHTML = '';
+    document.getElementById('res-ci').classList.remove('show');
+    hideSt('st-ci');
+  }
+  checkBtns();
+}
+
+function showSt(id, type, msg, spin){
+  const el = document.getElementById(id);
+  el.className = 'status show s-'+type;
+  el.innerHTML = (spin?'<div class="spin"></div>':'') + '<span>'+msg+'</span>';
+}
+function hideSt(id){ document.getElementById(id).className = 'status'; }
+
+function clearHist(){
+  histFirst = true;
+  document.getElementById('hist-body').innerHTML = '<tr><td colspan="7" class="hist-empty">Aucun dossier traité</td></tr>';
+}
+
+// ══════════════════════════════════════════
+// FILE → BASE64
+// ══════════════════════════════════════════
+function toB64(file){
+  return new Promise((res,rej)=>{
+    const r = new FileReader();
+    r.onload = e => res(e.target.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// ══════════════════════════════════════════
+// CLAUDE API CALL
+// ══════════════════════════════════════════
+// Split PDF into page ranges for large documents
+async function splitPDFPages(file, pagesPerBatch){
+  // We can't actually split PDFs in browser - instead we send the full PDF
+  // but instruct Claude to focus on specific page ranges
+  return null; // handled via page range prompts
+}
+
+async function callClaudeWithPageRange(system, fileObjs, pageRange){
+  const apiKey = localStorage.getItem('artextyl_api_key')||'';
+  const content = [];
+  for(const {file, label} of fileObjs){
+    if(!file) continue;
+    content.push({type:'text', text:'=== '+label+' ('+file.name+') ==='});
+    const b64 = await toB64(file);
+    if(file.type === 'application/pdf'){
+      content.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}});
+    } else if(file.type.startsWith('image/')){
+      content.push({type:'image', source:{type:'base64', media_type:file.type, data:b64}});
+    } else {
+      content.push({type:'text', text:'[Fichier Excel — extraire toutes les données: styles, couleurs, quantités par couleur, prix, ETD, numéros de documents]'});
+    }
+  }
+  // Add page range instruction if specified
+  // Always skip page 1 (summary) and start from detail pages
+  const rangeInstruction = pageRange 
+    ? `IMPORTANT: Analyse UNIQUEMENT les pages ${pageRange.from} à ${pageRange.to} de ce document. Page 1 = résumé à ignorer. Les pages de détails commencent à partir de la page 2 ou 3.`
+    : `IMPORTANT: Ignore la page 1 qui est un résumé. Lis les pages de détails (page 2, 3, etc.) qui contiennent les couleurs, tailles et quantités exactes par ligne.`;
+  content.push({type:'text', text: rangeInstruction + '\nRetourne uniquement le JSON demandé.'});
+  
+  const resp = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body: JSON.stringify({model:'claude-opus-4-5', max_tokens:4000, system, messages:[{role:'user',content}]})
+  });
+  if(!resp.ok) throw new Error('API Claude: '+resp.status+' — '+(await resp.text()));
+  const data = await resp.json();
+  const text = data.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim();
+  return JSON.parse(text);
+}
+
+async function callClaude(system, fileObjs){
+  return callClaudeWithPageRange(system, fileObjs, null);
+}
+
+// Merge multiple PFI extraction results into one
+function mergePFIResults(results){
+  if(!results.length) return null;
+  const base = {...results[0]};
+  base.articles = [];
+  base.total_qty = 0;
+  base.total_amount = 0;
+  for(const r of results){
+    if(r.articles) base.articles.push(...r.articles);
+    base.total_qty += r.total_qty||0;
+    base.total_amount += r.total_amount||0;
+    // Keep pi_numero, payment_terms etc from first result
+  }
+  return base;
+}
+
+// ══════════════════════════════════════════
+// PROMPTS
+// ══════════════════════════════════════════
+const SYS_PFI = `Tu es expert en commerce international textile. Analyse ce PFI (Proforma Invoice).
+
+STRUCTURE DU DOCUMENT:
+- Page 1 (parfois page 2) = RESUME global sans détail des couleurs → IGNORER pour les quantités
+- Pages suivantes = DETAIL avec couleurs, tailles, quantités par ligne → LIRE CES PAGES
+
+REGLES:
+1. N° PI: champ "PI NO" ou "PI NO:" (ex: SUAM251862, NSR/ART/35/2026, QG25LK1211ATX). JAMAIS le nom du fichier.
+2. Lis UNIQUEMENT les pages DETAILLEES (avec colonnes couleurs, tailles S/M/L/XL, CTNS, TTL QTY).
+3. UN article PAR COULEUR PAR STYLE. Quantité = somme de toutes les tailles pour cette couleur.
+4. ref_key = mots du style SANS: MEN/LADY/BOY/GIRL/HH/GN/DB/et codes numériques/frs.
+   Ex: "ABATOR MEN DB 001" → ref_key="ABATOR", gender="MEN"
+   Ex: "AMIGOLORAL MEN BASIC GN 233 KAP" → ref_key="AMIGO BASIC", gender="MEN"
+   Ex: "BOSWELL MEN HOOD GN 233 DB" → ref_key="BOSWELL HOOD", gender="MEN"
+   Ex: "VATIKOLORAL LADY LONG HOOD 233 KAP" → ref_key="VATIKO LONG HOOD", gender="LADY"
+5. style_complet = STYLE NO complet tel qu'écrit.
+6. gender = MEN/LADY/BOY/GIRL. color = couleur exacte. code_frs = code fournisseur.
+
+Si le document contient plusieurs pages de détails, traite TOUTES les pages de détails.
+
+JSON compact - retourne UNIQUEMENT ce JSON sans markdown:
+{"pi_numero":"","pi_date":"","fournisseur":"","code_frs":"","payment_terms":"","shipment_terms":"","articles":[{"ref_key":"","style_complet":"","gender":"","color":"","qty_pfi":0,"unit_price":0,"etd":""}],"total_qty":0,"total_amount":0,"currency":"USD"}`;
+
+const SYS_CI = `Tu es expert en commerce international textile. Analyse ces documents shipping (CI, PL, BL, Weight Note).
+
+IMPORTANT: 
+- Extrais UN article PAR STYLE PAR COULEUR PAR GENDER avec sa quantité exacte
+- Le N° CI = numéro de la Commercial Invoice (ex: SUAM261802)
+- Le booking = numéro de booking (ex: B6101)
+- qty_final = quantité exacte pour cette couleur/gender (pas le total)
+- Pour la vérification croisée: compare les cartons, poids, quantités entre CI, PL, BL et Weight Note
+
+Retourne UNIQUEMENT ce JSON valide sans markdown:
+{"ci_numero":"","ci_date":"","booking":"","vessel":"","port_loading":"","port_discharge":"","etd_final":"","eta":"","container":"","seal":"","articles":[{"ref_key":"","gender":"","color":"","qty_final":0,"unit_price":0,"amount":0,"ctns":0}],"total_qty":0,"total_ctns":0,"total_amount":0,"gross_weight":0,"net_weight":0,"cbm":0,"currency":"USD","checks":{"qty_ci_pl_match":true,"qty_pl_bl_match":true,"qty_wn_bl_match":true,"weight_bl_pl_match":true,"weight_bl_wn_match":true,"ctns_match":true,"container_match":true,"seal_match":true,"notes":""}}`;
+
+// ══════════════════════════════════════════
+// FILL EXCEL IM5
+// ══════════════════════════════════════════
+// ══════════════════════════════════════════
+// CONFIRMATION DIALOG (async/await)
+// ══════════════════════════════════════════
+let confirmResolve = null;
+
+function confirmAnswer(yes){
+  document.getElementById('confirm-modal').style.display = 'none';
+  if(confirmResolve) { confirmResolve(yes); confirmResolve = null; }
+}
+
+async function askConfirm(excelInfo, pfiInfo, hint){
+  document.getElementById('confirm-excel').innerHTML = excelInfo;
+  document.getElementById('confirm-pfi').innerHTML = pfiInfo;
+  document.getElementById('confirm-hint').textContent = hint || '';
+  document.getElementById('confirm-modal').style.display = 'flex';
+  return new Promise(resolve => { confirmResolve = resolve; });
+}
+
+// ══════════════════════════════════════════
+// SMART MATCHING
+// ══════════════════════════════════════════
+// ══ MOTS BLOQUANTS : doivent être présents dans les DEUX ou absents des DEUX
+const BLOCK_KW = ['GTX','BASIC','HOOD','LONG','SHORT'];
+
+// Tokenize: split by spaces/dashes/slashes, uppercase
+function tokenize(s){
+  return (s||'').toUpperCase().trim().split(/[\s_\-\/]+/).filter(w=>w.length>0);
+}
+
+// Scoring - L'ORDRE N'A PAS D'IMPORTANCE, seule la présence des mots compte
+function matchScore(excelRow, art){
+  // Mots de la REF Excel (ex: ["AURELIEN","GTX"] ou ["REINE"] ou ["CALIX"])
+  const exRefTokens   = tokenize(excelRow.ref || '');
+  const exGender      = (excelRow.gender||'').toUpperCase().trim();
+  const exColor       = (excelRow.color||'').toUpperCase().replace(/[\s\/\-]+/g,'');
+
+  // Tous les mots du PFI (style_complet contient tout: ref, genre, marque, code)
+  const artFull       = ((art.style_complet||'')+' '+(art.ref_key||'')+' '+(art.description||'')+' '+(art.gender||'')).toUpperCase();
+  const artFullTokens = tokenize(artFull);
+  const artColor      = (art.color||'').toUpperCase().replace(/[\s\/\-]+/g,'');
+
+  // ── ETAPE 1: Chaque mot de la REF Excel doit exister dans le PFI (ordre libre)
+  for(const word of exRefTokens){
+    if(word.length <= 1) continue; // ignorer lettres seules
+    if(!artFullTokens.includes(word)){
+      return {score:-1, disqualified:true,
+              reason:'Mot "'+word+'" absent du PFI "'+artFull.substring(0,50)+'"'};
+    }
+  }
+
+  // ── ETAPE 2: Mots bloquants symétriques
+  // Si le PFI a GTX mais pas l'Excel REF → disqualifié aussi
+  for(const kw of BLOCK_KW){
+    const inEx  = exRefTokens.includes(kw);
+    const inArt = artFullTokens.includes(kw);
+    if(inArt && !inEx){
+      return {score:-1, disqualified:true,
+              reason:'Mot bloquant "'+kw+'" dans PFI mais absent de la REF Excel'};
+    }
+  }
+
+  let score = 30; // base: tous les mots REF trouvés
+
+  // ── ETAPE 3: COULEUR (+30 exacte, +15 partielle, -20 différente)
+  if(exColor && artColor){
+    if(exColor === artColor) score += 30;
+    else if(exColor.includes(artColor) || artColor.includes(exColor)) score += 15;
+    else score -= 20;
+  }
+
+  // ── ETAPE 4: GENRE — obligatoire pour AUTO (score≥60)
+  if(exGender){
+    const genderAliases = {
+      'MEN':  ['MEN','MENS',"MEN'S",'MALE','HOMME'],
+      'LADY': ['LADY','LADIES',"LADY'S",'WOMAN','WOMEN','FEMALE','FEMME'],
+      'BOY':  ['BOY','BOYS','GARCON'],
+      'GIRL': ['GIRL','GIRLS','FILLE'],
+      'KID':  ['KID','KIDS','CHILD','JUNIOR','ENFANT'],
+    };
+    const aliases = genderAliases[exGender] || [exGender];
+    const genderFound = aliases.some(a => artFullTokens.includes(a));
+    if(genderFound) score += 20;
+    else score -= 30; // genre absent → empêche AUTO
+  }
+
+  return {score, disqualified:false};
+}
+
+
+async function fillExcel(excelFile, fillType, extracted, qtyPfiCol, interactive=true){
+  const buf = await excelFile.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array', cellDates:true});
+  if(!wb.SheetNames.includes('IM5'))
+    throw new Error("Onglet 'IM5' introuvable dans le fichier Excel.");
+  const ws = wb.Sheets['IM5'];
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const maxRow = range.e.r + 1;
+
+  const C = {
+    REF:9, GENDER:10, MARQUE:11, COLOR:12, REF_COMPLET:13,
+    CODE_FRS:14, QTY:15, QTY_PFI:16,
+    PRICE_FINAL:22, TOTAUX:23, REGLEMENT:24,
+    N_PI:25, ETD:26,
+    COMM_INVOICE:36, BOOKING:37, ETD_FINAL:38, ETA:39,
+    QTY_FINAL:40, DEPOSIT:41, BALANCE:42, BALANCE2:43,
+    MONTANT_FINAL:44, COMMENT:45
+  };
+
+  function getV(row,col){
+    const a=XLSX.utils.encode_cell({r:row-1,c:col-1});
+    const c=ws[a];
+    if(!c) return null;
+    if(c.t==='d') return c.v;
+    return c.w||c.v||null;
+  }
+  function setV(row,col,val){
+    const a=XLSX.utils.encode_cell({r:row-1,c:col-1});
+    const ex=ws[a]||{};
+    if(val instanceof Date) ws[a]={...ex,t:'d',v:val,w:val.toLocaleDateString('fr-FR')};
+    else if(typeof val==='number') ws[a]={...ex,t:'n',v:val,w:String(val)};
+    else ws[a]={...ex,t:'s',v:String(val),w:String(val)};
+  }
+  function parseD(s){
+    if(!s) return null;
+    if(s instanceof Date) return s;
+    let m=String(s).match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+    if(m){const y=m[3].length===2?2000+parseInt(m[3]):parseInt(m[3]);return new Date(y,parseInt(m[2])-1,parseInt(m[1]));}
+    m=String(s).match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+    if(m) return new Date(parseInt(m[1]),parseInt(m[2])-1,parseInt(m[3]));
+    return null;
+  }
+
+  const filled=[], skipped=[], notFound=[], debugLog=[];
+
+  function applyPFI(row, art, pt, qtyV, qtyPfiCol){
+    if(art.unit_price) setV(row,C.PRICE_FINAL,art.unit_price);
+    if(pt) setV(row,C.REGLEMENT,pt);
+    if(art.etd){const d=parseD(art.etd);if(d)setV(row,C.ETD,d);}
+    if(qtyV&&art.unit_price) setV(row,C.TOTAUX,Math.round(qtyV*art.unit_price*100)/100);
+    const qpc=qtyPfiCol||C.QTY_PFI;
+    if(qpc&&art.qty_pfi) setV(row,qpc,art.qty_pfi);
+  }
+
+  if(fillType==='pfi'){
+    const pi=extracted.pi_numero||'';
+    const frs=extracted.code_frs||'';
+    const arts=extracted.articles||[];
+    const pt=extracted.payment_terms||'';
+    debugLog.push('🔍 N°PI: "'+pi+'" | FRS: "'+frs+'"');
+    debugLog.push('📦 PFI articles: '+arts.map(a=>a.ref_key+(a.color?' '+a.color:'')+' qty='+a.qty_pfi).join(' | '));
+
+    let piCount=0;
+    for(let row=2;row<=maxRow;row++){
+      const piV=String(getV(row,C.N_PI)||'').trim();
+      if(!piV) continue;
+      // Matching PI: exact OU les chiffres sont identiques (les lettres peuvent différer)
+      function extractNums(s){ return s.replace(/[^0-9]/g,''); }
+      const piNums = extractNums(pi);
+      const piVNums = extractNums(piV);
+      // Match si exact, ou si les chiffres sont identiques, ou si l'un contient les chiffres de l'autre
+      const piMatch = piV === pi || 
+        (piNums.length >= 4 && piVNums.length >= 4 && (piNums === piVNums || piNums.includes(piVNums) || piVNums.includes(piNums)));
+      if(!piMatch) continue;
+      piCount++;
+
+      const refV  =String(getV(row,C.REF)||'').trim();
+      const frsV  =String(getV(row,C.CODE_FRS)||'').trim();
+      const colorV=String(getV(row,C.COLOR)||'').trim();
+      const genderV=String(getV(row,C.GENDER)||'').trim();
+      const qtyV  =parseFloat(getV(row,C.QTY)||0);
+      const refComplet=String(getV(row,C.REF_COMPLET)||refV).trim();
+
+      // FRS check désactivé - trop de codes frs différents
+
+      const excelRow = {ref:refV, color:colorV, gender:genderV, refComplet};
+
+      // Score all PFI articles
+      const scored = arts.map(art=>({art, ...matchScore(excelRow, art)}))
+        .filter(r=>!r.disqualified && r.score>0)
+        .sort((a,b)=>b.score-a.score);
+
+      debugLog.push('  Row '+row+': '+refComplet+' → '+scored.length+' candidat(s)');
+
+      if(scored.length === 0){
+        notFound.push({row,ref:refV,color:colorV,reason:'no match'});
+        debugLog.push('    ❌ Aucune correspondance');
+        continue;
+      }
+
+      const best = scored[0];
+      debugLog.push('    Best: '+best.art.ref_key+' '+(best.art.color||'')+ ' score='+best.score);
+
+      // HIGH confidence (score >= 60) → fill directly
+      if(best.score >= 60){
+        applyPFI(row, best.art, pt, qtyV, qtyPfiCol);
+        filled.push({row,ref:refV,color:colorV,score:best.score,auto:true});
+        debugLog.push('    ✅ AUTO FILL score='+best.score);
+      }
+      // MEDIUM confidence (30-59) → ask user
+      else if(best.score >= 20 && interactive){
+        debugLog.push('    ❓ Score moyen ('+best.score+') → confirmation demandée');
+        const excelInfo = `<strong>${refV}</strong><br>${genderV} · ${colorV}<br><small style="color:var(--t2)">${refComplet}</small>`;
+        const pfiInfo   = `<strong>${best.art.ref_key}</strong><br>${best.art.color||'—'}<br><small style="color:var(--t2)">QTY: ${best.art.qty_pfi} · Prix: ${best.art.unit_price}</small>`;
+        const hint = 'Score de confiance: '+best.score+'/100. Les différences surlignées nécessitent votre confirmation.';
+        const yes = await askConfirm(excelInfo, pfiInfo, hint);
+        if(yes){
+          applyPFI(row, best.art, pt, qtyV, qtyPfiCol);
+          filled.push({row,ref:refV,color:colorV,score:best.score,manual:true});
+          debugLog.push('    ✅ MANUAL FILL confirmed by user');
+        } else {
+          skipped.push({row,ref:refV,color:colorV,reason:'skipped by user'});
+          debugLog.push('    ⏭ Skipped by user');
+        }
+      }
+      // LOW confidence → skip silently
+      else {
+        notFound.push({row,ref:refV,color:colorV,reason:'low confidence score='+best.score});
+        debugLog.push('    ⚠️ Score trop faible ('+best.score+') → ignoré');
+      }
+    }
+    debugLog.push('📊 Rows avec ce PI: '+piCount+' | Remplis: '+filled.length+' | Sautés: '+skipped.length);
+
+  } else {
+    // CI fill: match par BOOKING + REF + GENDER + COLOR (pas N°PI)
+    const booking=extracted.booking||'';
+    const ci=extracted.ci_numero||'';
+    const arts=extracted.articles||[];
+    debugLog.push('🔍 BOOKING: "'+booking+'"');
+    debugLog.push('📦 CI articles: '+arts.map(a=>(a.ref_key||'')+(a.gender?' '+a.gender:'')+(a.color?' '+a.color:'')+' qty='+a.qty_final).join(' | '));
+
+    for(let row=2;row<=maxRow;row++){
+      const bkV=String(getV(row,C.BOOKING)||'').trim();
+      if(!bkV||bkV!==booking) continue;
+
+      const refV   =String(getV(row,C.REF)||'').trim();
+      const colorV =String(getV(row,C.COLOR)||'').trim();
+      const genderV=String(getV(row,C.GENDER)||'').trim();
+      const priceV =parseFloat(getV(row,C.PRICE_FINAL)||0);
+      const qpfi   =qtyPfiCol?parseFloat(getV(row,qtyPfiCol)||0):parseFloat(getV(row,C.QTY_PFI)||0);
+
+      debugLog.push('  Row '+row+': REF='+refV+' GENDER='+genderV+' COLOR='+colorV);
+
+      // Trouver le meilleur article CI correspondant via matchScore
+      let bestArt=null, bestScore=-999;
+      for(const art of arts){
+        const ms=matchScore({ref:refV,gender:genderV,color:colorV,refComplet:refV},art);
+        if(!ms.disqualified && ms.score>bestScore){
+          bestScore=ms.score; bestArt=art;
+        }
+      }
+
+      if(bestArt && bestScore>=20){
+        const qtyFinal=bestArt.qty_final||0;
+        if(qtyFinal) setV(row,C.QTY_FINAL,qtyFinal);
+        if(bestArt.amount) setV(row,C.BALANCE,bestArt.amount);
+        if(ci) setV(row,C.COMM_INVOICE,ci);
+        if(extracted.etd_final){const d=parseD(extracted.etd_final);if(d)setV(row,C.ETD_FINAL,d);}
+        if(extracted.eta){const d=parseD(extracted.eta);if(d)setV(row,C.ETA,d);}
+        if(qpfi&&qtyFinal) setV(row,C.BALANCE2,Math.round(qtyFinal/qpfi*10000)/10000);
+        if(priceV&&qtyFinal) setV(row,C.MONTANT_FINAL,Math.round(priceV*qtyFinal*100)/100);
+        filled.push({row,ref:refV,color:colorV,gender:genderV,score:bestScore});
+        debugLog.push('    ✅ score='+bestScore+' QTY_FINAL='+qtyFinal+' CI='+ci);
+      } else {
+        notFound.push({row,ref:refV,color:colorV,reason:'score='+bestScore});
+        debugLog.push('    ⚠️ Pas de correspondance (best score='+bestScore+')');
+      }
+    }
+  const outBuf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
+  return {
+    blob:new Blob([outBuf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
+    filled, skipped, notFound, debugLog
+  };
+}
+
+// ══════════════════════════════════════════
+// RUN PFI (multi-file)
+// ══════════════════════════════════════════
+async function runPFI(){
+  document.getElementById('btn-pfi').disabled=true;
+  const resEl=document.getElementById('res-pfi');
+  resEl.innerHTML=''; resEl.classList.remove('show');
+  showSt('st-pfi','info','Traitement de '+pfiFiles.length+' PFI en cours...',true);
+
+  const qc=document.getElementById('col-pfi').value;
+  const qCol=qc?parseInt(qc):null;
+  const results=[];
+
+  try{
+    for(let i=0;i<pfiFiles.length;i++){
+      const {file}=pfiFiles[i];
+      const pagesPerBatch = parseInt(document.getElementById('pages-per-batch').value)||0;
+      
+      let data;
+      if(pagesPerBatch > 0){
+        // Split into page batches
+        showSt('st-pfi','info',`PFI ${i+1}/${pfiFiles.length} : traitement par lots de ${pagesPerBatch} pages...`,true);
+        const batchResults = [];
+        // We'll do up to 10 batches max
+        const maxBatches = 10;
+        for(let batch=0; batch<maxBatches; batch++){
+          const fromPage = batch * pagesPerBatch + 1;
+          const toPage = (batch+1) * pagesPerBatch;
+          showSt('st-pfi','info',`PFI ${i+1}/${pfiFiles.length} : pages ${fromPage}-${toPage}...`,true);
+          try {
+            // Wait between batches to respect rate limit (10k tokens/min)
+            if(batch > 0){
+              showSt('st-pfi','info',`⏳ Pause 65s pour respecter la limite API... (lot ${batch+1})`,true);
+              await new Promise(r => setTimeout(r, 65000));
+            }
+            const batchData = await callClaudeWithPageRange(
+              SYS_PFI,
+              [{file, label:'PFI - Proforma Invoice'}],
+              {from: fromPage, to: toPage}
+            );
+            if(batchData && batchData.articles && batchData.articles.length > 0){
+              batchResults.push(batchData);
+              // If this batch returned fewer articles than expected, we've reached the end
+              if(batchData.articles.length < 2) break;
+            } else {
+              break; // No more articles found
+            }
+          } catch(e) {
+            if(e.message.includes('Unterminated') || e.message.includes('JSON')) break;
+            throw e;
+          }
+        }
+        data = batchResults.length > 0 ? mergePFIResults(batchResults) : await callClaude(SYS_PFI,[{file,label:'PFI - Proforma Invoice'}]);
+      } else {
+        showSt('st-pfi','info',`PFI ${i+1}/${pfiFiles.length} : extraction IA de ${file.name}...`,true);
+        data = await callClaude(SYS_PFI,[{file,label:'PFI - Proforma Invoice'}]);
+      }
+      showSt('st-pfi','info',`PFI ${i+1}/${pfiFiles.length} : mise à jour IM5...`,true);
+      const res=await fillExcel(F.excelPfi,'pfi',data,qCol);
+      // For next PFI, use the updated blob as input
+      if(i<pfiFiles.length-1){
+        F.excelPfi=new File([res.blob],'updated.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      }
+      blobs['pfi_'+i]=res.blob;
+      results.push({data,res,idx:i,name:file.name});
+    }
+    // Final blob = last result
+    blobs.pfi=blobs['pfi_'+(pfiFiles.length-1)];
+
+    buildPFIResults(results);
+    resEl.classList.add('show');
+    const totalFilled=results.reduce((s,r)=>s+r.res.filled.length,0);
+    const totalSkipped=results.reduce((s,r)=>s+(r.res.skipped||[]).length,0);
+    showSt('st-pfi','ok',`✅ ${pfiFiles.length} PFI traités — ${totalFilled} ligne(s) remplie(s)${totalSkipped?' · '+totalSkipped+' sautée(s) par vous':''} — Excel prêt`);
+    results.forEach(r=>addHist('PFI',r.data.pi_numero||'—',r.data.fournisseur||'—',(r.data.articles||[]).length,r.data.total_amount,r.data.currency,r.res.filled.length));
+  }catch(e){
+    showSt('st-pfi','err','⚠ '+e.message);
+  } finally {
+    document.getElementById('btn-pfi').disabled=false;
+    checkBtns();
+  }
+}
+
+function buildPFIResults(results){
+  const resEl=document.getElementById('res-pfi');
+  let html='<div class="card">';
+  // Tabs if multiple
+  if(results.length>1){
+    html+='<div class="rtabs">';
+    results.forEach((r,i)=>html+=`<button class="rtab${i===0?' active':''}" onclick="showRtab('pfi',${i})" id="rtab-pfi-${i}">${r.data.pi_numero||r.name}</button>`);
+    html+='</div>';
+  }
+  results.forEach((r,i)=>{
+    const {data,res}=r;
+    const arts=data.articles||[];
+    html+=`<div id="rpanel-pfi-${i}" style="${i>0?'display:none':''}">`;
+    html+=`<div class="legend"><div class="leg"><div class="legbox lp"></div>Rempli par IA (PFI)</div><div class="leg"><div class="legbox lm"></div>Existant</div></div>`;
+    html+=`<div class="sep">Informations générales</div>`;
+    html+=`<div class="fgrid">`;
+    [['N° PI',data.pi_numero,'pfi'],['Date',data.pi_date,''],['Fournisseur',data.fournisseur,''],['Code FRS',data.code_frs,''],['Payment Terms',data.payment_terms,'pfi'],['Total Qté',(data.total_qty||0).toLocaleString('fr-FR'),'pfi'],['Total Montant',(data.currency||'USD')+' '+(data.total_amount||0).toLocaleString('fr-FR',{minimumFractionDigits:2}),'pfi'],['ETD','—','']].forEach(([l,v,c])=>{
+      html+=`<div class="field"><label>${l}</label><input class="fval ${c}" value="${v||'—'}" readonly></div>`;
+    });
+    html+='</div>';
+    html+=`<div class="sep">Articles par couleur</div><div style="overflow-x:auto"><table><thead><tr><th>Style</th><th>Description</th><th>Couleur</th><th>Marque</th><th class="pc">QTY PFI</th><th class="pc">Prix unit.</th><th class="pc">Montant</th><th class="pc">ETD</th></tr></thead><tbody>`;
+    arts.forEach(a=>{
+      html+=`<tr><td>${a.ref_key||'—'}</td><td>${a.description||'—'}</td><td>${a.color||'—'}</td><td>${a.marque||'—'}</td><td class="pc"><strong>${(a.qty_pfi||0).toLocaleString('fr-FR')}</strong></td><td class="pc">${data.currency||'USD'} ${(a.unit_price||0).toFixed(2)}</td><td class="pc">${data.currency||'USD'} ${(a.amount||0).toLocaleString('fr-FR',{minimumFractionDigits:2})}</td><td class="pc">${a.etd||'—'}</td></tr>`;
+    });
+    if(!arts.length) html+='<tr><td colspan="8" style="text-align:center;padding:1rem;color:#9c9a94">Aucun article extrait</td></tr>';
+    html+='</tbody></table></div>';
+    html+=`<div class="sep">Résultat IM5</div>`;
+    html+=`<div class="sumbox"><strong>${res.filled.length} ligne(s) remplie(s)</strong>`;
+    if(res.filled.length) html+=`<br><small style="color:var(--t2)">${res.filled.map(f=>'#'+f.row+' '+f.ref+' '+f.color).join(' · ')}</small>`;
+    if(res.skipped&&res.skipped.length) html+=`<br><span style="color:var(--blue);font-size:12px">⏭ ${res.skipped.length} sautée(s) par vous: ${res.skipped.map(r=>r.ref+' '+r.color).join(', ')}</span>`;
+    if(res.notFound.length) html+=`<br><span style="color:var(--amber);font-size:12px">⚠ ${res.notFound.length} non trouvée(s): ${res.notFound.map(r=>r.ref+' '+r.color+(r.reason?' ('+r.reason+')':'')).join(', ')}</span>`;
+    const autoFilled=(res.filled||[]).filter(f=>f.auto).length;
+    const manFilled=(res.filled||[]).filter(f=>f.manual).length;
+    if(autoFilled||manFilled) html+=`<br><small style="color:var(--t2)">Auto: ${autoFilled} · Confirmé: ${manFilled}</small>`;
+    if(res.debugLog.length) html+=`<div class="dbgbox">${res.debugLog.join('<br>')}</div>`;
+    html+='</div></div>';
+  });
+  html+=`<div class="brow"><button class="btn btn-ghost" onclick="resetAll('pfi')">↩ Vider tout</button><button class="btn btn-green" onclick="dlExcel('pfi')">⬇ Télécharger Excel mis à jour</button></div>`;
+  html+='</div>';
+  resEl.innerHTML=html;
+}
+
+function showRtab(type,idx){
+  document.querySelectorAll(`[id^="rtab-${type}-"]`).forEach((t,i)=>t.classList.toggle('active',i===idx));
+  document.querySelectorAll(`[id^="rpanel-${type}-"]`).forEach((p,i)=>p.style.display=i===idx?'':'none');
+}
+
+// ══════════════════════════════════════════
+// RUN CI
+// ══════════════════════════════════════════
+async function runCI(){
+  document.getElementById('btn-ci').disabled=true;
+  const resEl=document.getElementById('res-ci');
+  resEl.innerHTML=''; resEl.classList.remove('show');
+  showSt('st-ci','info','Extraction IA des documents shipping...',true);
+
+  try{
+    const docs=[
+      {file:F.ci,label:'CI - Commercial Invoice'},
+      {file:F.pl,label:'PL - Packing List'},
+      {file:F.bl,label:'BL - Bill of Lading'},
+      {file:F.wn,label:'Weight Note'},
+    ].filter(d=>d.file);
+    const data=await callClaude(SYS_CI,docs);
+    showSt('st-ci','info','Mise à jour IM5...',true);
+    const qc=document.getElementById('col-ci').value;
+    const qCol=qc?parseInt(qc):null;
+    const res=await fillExcel(F.excelCi,'ci',data,qCol);
+    blobs.ci=res.blob;
+
+    buildCIResult(data,res);
+    resEl.classList.add('show');
+    showSt('st-ci','ok',`✅ ${res.filled.length} ligne(s) remplie(s) — Excel final prêt`);
+    addHist('CI/BL',data.booking||'—',data.ci_numero||'—',(data.articles||[]).length,data.total_amount,data.currency,res.filled.length);
+  }catch(e){
+    showSt('st-ci','err','⚠ '+e.message);
+  } finally {
+    document.getElementById('btn-ci').disabled=false;
+  }
+}
+
+function buildCIResult(data,res){
+  const resEl=document.getElementById('res-ci');
+  const arts=data.articles||[];
+  const chk=data.checks||{};
+  let html='<div class="card">';
+  html+=`<div class="legend"><div class="leg"><div class="legbox lc"></div>Rempli par IA (CI/BL)</div><div class="leg"><div class="legbox lp"></div>Rempli étape PFI</div></div>`;
+  html+=`<div class="sep">Informations logistiques</div><div class="fgrid">`;
+  [['N° CI',data.ci_numero,'ci'],['Date CI',data.ci_date,''],['Booking',data.booking,''],['Navire',data.vessel,''],['Port chargement',data.port_loading,''],['Port décharge',data.port_discharge,''],['ETD Final',data.etd_final,'ci'],['ETA',data.eta,'ci'],['Conteneur',data.container,''],['Poids brut (kg)',data.gross_weight,''],['CBM',data.cbm,''],['Montant total',(data.currency||'USD')+' '+(data.total_amount||0).toLocaleString('fr-FR',{minimumFractionDigits:2}),'ci']].forEach(([l,v,c])=>{
+    html+=`<div class="field"><label>${l}</label><input class="fval ${c}" value="${v||'—'}" readonly></div>`;
+  });
+  html+='</div>';
+  html+=`<div class="sep">Articles</div><div style="overflow-x:auto"><table><thead><tr><th>Style</th><th class="cc">QTY FINAL</th><th class="cc">Montant</th><th class="cc">N° CI</th><th class="cc">ETD Final</th><th class="cc">ETA</th></tr></thead><tbody>`;
+  arts.forEach(a=>{html+=`<tr><td>${a.ref_key||'—'}</td><td class="cc"><strong>${(a.qty_final||0).toLocaleString('fr-FR')}</strong></td><td class="cc">${data.currency||'USD'} ${(a.amount||0).toLocaleString('fr-FR',{minimumFractionDigits:2})}</td><td class="cc">${data.ci_numero||'—'}</td><td class="cc">${data.etd_final||'—'}</td><td class="cc">${data.eta||'—'}</td></tr>`;});
+  if(!arts.length) html+='<tr><td colspan="6" style="text-align:center;padding:1rem;color:#9c9a94">Aucun article</td></tr>';
+  html+='</tbody></table></div>';
+  html+=`<div class="sep">Vérification croisée</div><div class="chklist">`;
+  [['Quantités CI = PL = Weight Note',chk.qty_ci_pl_match],['Poids brut PL = BL',chk.weight_bl_pl_match],['N° Booking cohérent',chk.booking_consistent]].forEach(([l,ok])=>{
+    html+=`<div class="chkrow"><span>${l}</span><span class="bdg ${ok===true?'b-ok':ok===false?'b-err':'b-neu'}">${ok===true?'✓ OK':ok===false?'✗ Écart':'— ?'}</span></div>`;
+  });
+  html+='</div>';
+  html+=`<div class="sep">Résultat IM5</div><div class="sumbox"><strong>${res.filled.length} ligne(s) remplie(s)</strong>`;
+  if(res.filled.length) html+=`<br><small style="color:var(--t2)">${res.filled.map(f=>'#'+f.row+' '+f.ref+' '+f.color).join(' · ')}</small>`;
+  if(res.notFound.length) html+=`<br><span style="color:var(--amber);font-size:12px">⚠ ${res.notFound.length} non trouvée(s)</span>`;
+  if(res.debugLog.length) html+=`<div class="dbgbox">${res.debugLog.join('<br>')}</div>`;
+  html+='</div>';
+  html+=`<div class="brow"><button class="btn btn-ghost" onclick="resetAll('ci')">↩ Vider tout</button><button class="btn btn-green" onclick="dlExcel('ci')">⬇ Télécharger Excel final</button></div>`;
+  html+='</div>';
+  resEl.innerHTML=html;
+}
+
+// ══════════════════════════════════════════
+// DOWNLOAD
+// ══════════════════════════════════════════
+function dlExcel(type){
+  if(!blobs[type]) return;
+  const name=type==='pfi'?'PROD_IM5_PFI_updated.xlsx':'PROD_IM5_CI_final.xlsx';
+  const url=URL.createObjectURL(blobs[type]);
+  const a=document.createElement('a');a.href=url;a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+
+// ══════════════════════════════════════════
+// HISTORIQUE
+// ══════════════════════════════════════════
+function addHist(type,ref,frs,arts,amt,cur,filled){
+  const body=document.getElementById('hist-body');
+  if(histFirst){body.innerHTML='';histFirst=false;}
+  const now=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  const tag=type==='PFI'?'<span class="bdg b-ok">PFI</span>':'<span class="bdg" style="background:var(--bbg);color:var(--blue)">CI/BL</span>';
+  body.insertAdjacentHTML('afterbegin',`<tr><td>${now}</td><td>${tag}</td><td><strong>${ref}</strong></td><td>${frs}</td><td>${arts}</td><td>${cur||'USD'} ${Number(amt||0).toLocaleString('fr-FR',{minimumFractionDigits:2})}</td><td><span class="bdg b-ok">${filled} ligne(s)</span></td></tr>`);
+}
+
+// ══════════════════════════════════════════
+// MACRO VBA DOWNLOAD
+// ══════════════════════════════════════════
+function downloadMacro(){
+  const b64 = "JyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KJyBBUlRFWFRZTCDigJQgTWFjcm8gRXhwb3J0IFBERiB2MgonID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQoKU3ViIEV4cG9ydFBERl9GaWNoaWVyQWN0aWYoKQogICAgRGltIHdiIEFzIFdvcmtib29rCiAgICBEaW0gd3MgQXMgV29ya3NoZWV0CiAgICBEaW0gUERGUGF0aCBBcyBTdHJpbmcKICAgIERpbSBQSU51bWJlciBBcyBTdHJpbmcKICAgIERpbSBGb2xkZXJQYXRoIEFzIFN0cmluZwogICAgCiAgICBTZXQgd2IgPSBBY3RpdmVXb3JrYm9vawogICAgCiAgICAnIERlZmluaXIgem9uZXMgaW1wcmVzc2lvbiBzdXIgdG91cyBsZXMgb25nbGV0cwogICAgRm9yIEVhY2ggd3MgSW4gd2IuV29ya3NoZWV0cwogICAgICAgIElmIHdzLlVzZWRSYW5nZS5DZWxscy5Db3VudCA+IDEgVGhlbgogICAgICAgICAgICB3cy5QYWdlU2V0dXAuUHJpbnRBcmVhID0gd3MuVXNlZFJhbmdlLkFkZHJlc3MKICAgICAgICAgICAgd3MuUGFnZVNldHVwLlpvb20gPSBGYWxzZQogICAgICAgICAgICB3cy5QYWdlU2V0dXAuRml0VG9QYWdlc1dpZGUgPSAxCiAgICAgICAgICAgIHdzLlBhZ2VTZXR1cC5GaXRUb1BhZ2VzVGFsbCA9IEZhbHNlCiAgICAgICAgICAgIHdzLlBhZ2VTZXR1cC5PcmllbnRhdGlvbiA9IHhsTGFuZHNjYXBlCiAgICAgICAgRW5kIElmCiAgICBOZXh0IHdzCiAgICAKICAgICcgQ2hlcmNoZSBOwrAgUEkKICAgIFBJTnVtYmVyID0gVHJvdXZlck51bWVyb1BJKHdiKQogICAgCiAgICBJZiBQSU51bWJlciA9ICIiIFRoZW4KICAgICAgICBQSU51bWJlciA9IElucHV0Qm94KCJOwrAgUEkgbm9uIHRyb3V2w6kuIiAmIENocigxMykgJiAiRW50cmV6IGxlIE7CsCBQSSA6IiwgIk7CsCBQSSIsIF8KICAgICAgICAgICAgICAgICAgICAgICAgICAgTGVmdCh3Yi5OYW1lLCBJblN0clJldih3Yi5OYW1lLCAiLiIpIC0gMSkpCiAgICAgICAgSWYgUElOdW1iZXIgPSAiIiBUaGVuCiAgICAgICAgICAgIE1zZ0JveCAiRXhwb3J0IGFubnVsw6kuIiwgdmJFeGNsYW1hdGlvbgogICAgICAgICAgICBFeGl0IFN1YgogICAgICAgIEVuZCBJZgogICAgRW5kIElmCiAgICAKICAgIFBJTnVtYmVyID0gTmV0dG95ZXJOb21GaWNoaWVyKFBJTnVtYmVyKQogICAgRm9sZGVyUGF0aCA9IExlZnQod2IuRnVsbE5hbWUsIEluU3RyUmV2KHdiLkZ1bGxOYW1lLCAiXCIpKQogICAgUERGUGF0aCA9IEZvbGRlclBhdGggJiBQSU51bWJlciAmICIucGRmIgogICAgCiAgICAnIEV4cG9ydCBQREYKICAgIE9uIEVycm9yIEdvVG8gRXJyZXVyRXhwb3J0CiAgICB3Yi5FeHBvcnRBc0ZpeGVkRm9ybWF0IF8KICAgICAgICBUeXBlOj14bFR5cGVQREYsIF8KICAgICAgICBGaWxlTmFtZTo9UERGUGF0aCwgXwogICAgICAgIFF1YWxpdHk6PXhsUXVhbGl0eVN0YW5kYXJkLCBfCiAgICAgICAgSW5jbHVkZURvY1Byb3BlcnRpZXM6PVRydWUsIF8KICAgICAgICBJZ25vcmVQcmludEFyZWFzOj1GYWxzZSwgXwogICAgICAgIE9wZW5BZnRlclB1Ymxpc2g6PUZhbHNlCiAgICAKICAgICcgVmVyaWZpZXIgcXVlIGxlIGZpY2hpZXIgZXhpc3RlCiAgICBJZiBEaXIoUERGUGF0aCkgPD4gIiIgVGhlbgogICAgICAgIE1zZ0JveCAi4pyFIFBERiBjcsOpw6kgISIgJiBDaHIoMTMpICYgQ2hyKDEzKSAmIF8KICAgICAgICAgICAgICAgIk5vbSA6ICIgJiBQSU51bWJlciAmICIucGRmIiAmIENocigxMykgJiBfCiAgICAgICAgICAgICAgICJEb3NzaWVyIDogIiAmIEZvbGRlclBhdGgsIHZiSW5mb3JtYXRpb24sICJFeHBvcnQgUERGIEFydGV4dHlsIgogICAgRWxzZQogICAgICAgIE1zZ0JveCAi4pqg77iPIExlIGZpY2hpZXIgUERGIG4nYSBwYXMgw6l0w6kgY3LDqcOpLiIgJiBDaHIoMTMpICYgXwogICAgICAgICAgICAgICAiVsOpcmlmaWV6IHF1ZSBsZSBkb3NzaWVyIGV4aXN0ZSA6ICIgJiBGb2xkZXJQYXRoLCB2YkV4Y2xhbWF0aW9uCiAgICBFbmQgSWYKICAgIEV4aXQgU3ViCiAgICAKRXJyZXVyRXhwb3J0OgogICAgTXNnQm94ICLinYwgRXJyZXVyIDogIiAmIEVyci5EZXNjcmlwdGlvbiAmIENocigxMykgJiBDaHIoMTMpICYgXwogICAgICAgICAgICJDaGVtaW4gOiAiICYgUERGUGF0aCwgdmJDcml0aWNhbApFbmQgU3ViCgoKU3ViIEV4cG9ydFBERl9Eb3NzaWVyKCkKICAgIERpbSB3YiBBcyBXb3JrYm9vawogICAgRGltIHdzIEFzIFdvcmtzaGVldAogICAgRGltIEZpbGVQYXRoIEFzIFN0cmluZwogICAgRGltIEZvbGRlclBhdGggQXMgU3RyaW5nCiAgICBEaW0gUERGUGF0aCBBcyBTdHJpbmcKICAgIERpbSBQSU51bWJlciBBcyBTdHJpbmcKICAgIERpbSBDb21wdGV1ciBBcyBJbnRlZ2VyCiAgICBEaW0gRXJyZXVycyBBcyBTdHJpbmcKICAgIAogICAgV2l0aCBBcHBsaWNhdGlvbi5GaWxlRGlhbG9nKG1zb0ZpbGVEaWFsb2dGb2xkZXJQaWNrZXIpCiAgICAgICAgLlRpdGxlID0gIlPDqWxlY3Rpb25uZXogbGUgZG9zc2llciBjb250ZW5hbnQgbGVzIFBGSSBFeGNlbCIKICAgICAgICBJZiAuU2hvdyA8PiAtMSBUaGVuIEV4aXQgU3ViCiAgICAgICAgRm9sZGVyUGF0aCA9IC5TZWxlY3RlZEl0ZW1zKDEpCiAgICBFbmQgV2l0aAogICAgCiAgICBJZiBSaWdodChGb2xkZXJQYXRoLCAxKSA8PiAiXCIgVGhlbiBGb2xkZXJQYXRoID0gRm9sZGVyUGF0aCAmICJcIgogICAgCiAgICBDb21wdGV1ciA9IDAKICAgIEVycmV1cnMgPSAiIgogICAgRmlsZVBhdGggPSBEaXIoRm9sZGVyUGF0aCAmICIqLnhscyoiKQogICAgCiAgICBEbyBXaGlsZSBGaWxlUGF0aCA8PiAiIgogICAgICAgIElmIExlZnQoRmlsZVBhdGgsIDEpIDw+ICJ+IiBUaGVuCiAgICAgICAgICAgIE9uIEVycm9yIFJlc3VtZSBOZXh0CiAgICAgICAgICAgIFNldCB3YiA9IFdvcmtib29rcy5PcGVuKEZvbGRlclBhdGggJiBGaWxlUGF0aCwgUmVhZE9ubHk6PVRydWUpCiAgICAgICAgICAgIE9uIEVycm9yIEdvVG8gMAogICAgICAgICAgICAKICAgICAgICAgICAgSWYgTm90IHdiIElzIE5vdGhpbmcgVGhlbgogICAgICAgICAgICAgICAgJyBEZWZpbmlyIHpvbmVzIGltcHJlc3Npb24KICAgICAgICAgICAgICAgIEZvciBFYWNoIHdzIEluIHdiLldvcmtzaGVldHMKICAgICAgICAgICAgICAgICAgICBJZiB3cy5Vc2VkUmFuZ2UuQ2VsbHMuQ291bnQgPiAxIFRoZW4KICAgICAgICAgICAgICAgICAgICAgICAgd3MuUGFnZVNldHVwLlByaW50QXJlYSA9IHdzLlVzZWRSYW5nZS5BZGRyZXNzCiAgICAgICAgICAgICAgICAgICAgICAgIHdzLlBhZ2VTZXR1cC5ab29tID0gRmFsc2UKICAgICAgICAgICAgICAgICAgICAgICAgd3MuUGFnZVNldHVwLkZpdFRvUGFnZXNXaWRlID0gMQogICAgICAgICAgICAgICAgICAgICAgICB3cy5QYWdlU2V0dXAuRml0VG9QYWdlc1RhbGwgPSBGYWxzZQogICAgICAgICAgICAgICAgICAgICAgICB3cy5QYWdlU2V0dXAuT3JpZW50YXRpb24gPSB4bExhbmRzY2FwZQogICAgICAgICAgICAgICAgICAgIEVuZCBJZgogICAgICAgICAgICAgICAgTmV4dCB3cwogICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICBQSU51bWJlciA9IFRyb3V2ZXJOdW1lcm9QSSh3YikKICAgICAgICAgICAgICAgIElmIFBJTnVtYmVyID0gIiIgVGhlbgogICAgICAgICAgICAgICAgICAgIFBJTnVtYmVyID0gTGVmdChGaWxlUGF0aCwgSW5TdHJSZXYoRmlsZVBhdGgsICIuIikgLSAxKQogICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICBQSU51bWJlciA9IE5ldHRveWVyTm9tRmljaGllcihQSU51bWJlcikKICAgICAgICAgICAgICAgIFBERlBhdGggPSBGb2xkZXJQYXRoICYgUElOdW1iZXIgJiAiLnBkZiIKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgT24gRXJyb3IgUmVzdW1lIE5leHQKICAgICAgICAgICAgICAgIHdiLkV4cG9ydEFzRml4ZWRGb3JtYXQgXwogICAgICAgICAgICAgICAgICAgIFR5cGU6PXhsVHlwZVBERiwgXwogICAgICAgICAgICAgICAgICAgIEZpbGVOYW1lOj1QREZQYXRoLCBfCiAgICAgICAgICAgICAgICAgICAgUXVhbGl0eTo9eGxRdWFsaXR5U3RhbmRhcmQsIF8KICAgICAgICAgICAgICAgICAgICBJbmNsdWRlRG9jUHJvcGVydGllczo9VHJ1ZSwgXwogICAgICAgICAgICAgICAgICAgIElnbm9yZVByaW50QXJlYXM6PUZhbHNlLCBfCiAgICAgICAgICAgICAgICAgICAgT3BlbkFmdGVyUHVibGlzaDo9RmFsc2UKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgSWYgRXJyLk51bWJlciA8PiAwIFRoZW4KICAgICAgICAgICAgICAgICAgICBFcnJldXJzID0gRXJyZXVycyAmICItICIgJiBGaWxlUGF0aCAmIENocigxMykKICAgICAgICAgICAgICAgICAgICBFcnIuQ2xlYXIKICAgICAgICAgICAgICAgIEVsc2UKICAgICAgICAgICAgICAgICAgICBJZiBEaXIoUERGUGF0aCkgPD4gIiIgVGhlbiBDb21wdGV1ciA9IENvbXB0ZXVyICsgMQogICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICBPbiBFcnJvciBHb1RvIDAKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgd2IuQ2xvc2UgU2F2ZUNoYW5nZXM6PUZhbHNlCiAgICAgICAgICAgICAgICBTZXQgd2IgPSBOb3RoaW5nCiAgICAgICAgICAgIEVuZCBJZgogICAgICAgIEVuZCBJZgogICAgICAgIEZpbGVQYXRoID0gRGlyCiAgICBMb29wCiAgICAKICAgIERpbSBNZXNzYWdlIEFzIFN0cmluZwogICAgTWVzc2FnZSA9ICLinIUgVGVybWluw6kgISIgJiBDaHIoMTMpICYgQ2hyKDEzKSAmIENvbXB0ZXVyICYgIiBQREYgY3LDqcOpKHMpIGRhbnMgOiIgJiBDaHIoMTMpICYgRm9sZGVyUGF0aAogICAgSWYgRXJyZXVycyA8PiAiIiBUaGVuIE1lc3NhZ2UgPSBNZXNzYWdlICYgQ2hyKDEzKSAmIENocigxMykgJiAi4p2MIEVycmV1cnMgOiIgJiBDaHIoMTMpICYgRXJyZXVycwogICAgTXNnQm94IE1lc3NhZ2UsIHZiSW5mb3JtYXRpb24sICJFeHBvcnQgUERGIEFydGV4dHlsIgpFbmQgU3ViCgoKRnVuY3Rpb24gVHJvdXZlck51bWVyb1BJKHdiIEFzIFdvcmtib29rKSBBcyBTdHJpbmcKICAgIERpbSB3cyBBcyBXb3Jrc2hlZXQKICAgIERpbSB2YWxldXIgQXMgU3RyaW5nCiAgICBEaW0gcmVzdWx0IEFzIFN0cmluZwogICAgcmVzdWx0ID0gIiIKICAgIAogICAgRm9yIEVhY2ggd3MgSW4gd2IuV29ya3NoZWV0cwogICAgICAgIERpbSBtYXhSb3cgQXMgTG9uZywgbWF4Q29sIEFzIExvbmcKICAgICAgICBtYXhSb3cgPSBBcHBsaWNhdGlvbi5Xb3Jrc2hlZXRGdW5jdGlvbi5NaW4oNTAsIHdzLlVzZWRSYW5nZS5Sb3dzLkNvdW50KQogICAgICAgIG1heENvbCA9IEFwcGxpY2F0aW9uLldvcmtzaGVldEZ1bmN0aW9uLk1pbigzMCwgd3MuVXNlZFJhbmdlLkNvbHVtbnMuQ291bnQpCiAgICAgICAgCiAgICAgICAgRGltIGkgQXMgTG9uZywgaiBBcyBMb25nCiAgICAgICAgRm9yIGkgPSAxIFRvIG1heFJvdwogICAgICAgICAgICBGb3IgaiA9IDEgVG8gbWF4Q29sCiAgICAgICAgICAgICAgICB2YWxldXIgPSBUcmltKENTdHIod3MuQ2VsbHMoaSwgaikuVmFsdWUpKQogICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICBJZiBJblN0cihVQ2FzZSh2YWxldXIpLCAiUEkgTk8iKSA+IDAgVGhlbgogICAgICAgICAgICAgICAgICAgIElmIGogKyAxIDw9IG1heENvbCBUaGVuCiAgICAgICAgICAgICAgICAgICAgICAgIERpbSB2b2lzaW4gQXMgU3RyaW5nCiAgICAgICAgICAgICAgICAgICAgICAgIHZvaXNpbiA9IFRyaW0oQ1N0cih3cy5DZWxscyhpLCBqICsgMSkuVmFsdWUpKQogICAgICAgICAgICAgICAgICAgICAgICBJZiBMZW4odm9pc2luKSA+PSA0IEFuZCBJblN0cih2b2lzaW4sICIgIikgPSAwIFRoZW4KICAgICAgICAgICAgICAgICAgICAgICAgICAgIHJlc3VsdCA9IHZvaXNpbgogICAgICAgICAgICAgICAgICAgICAgICAgICAgR29UbyBUcm91dmUKICAgICAgICAgICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICAgICAgSWYgSW5TdHIodmFsZXVyLCAiOiIpID4gMCBUaGVuCiAgICAgICAgICAgICAgICAgICAgICAgIERpbSBwYXJ0cygpIEFzIFN0cmluZwogICAgICAgICAgICAgICAgICAgICAgICBwYXJ0cyA9IFNwbGl0KHZhbGV1ciwgIjoiKQogICAgICAgICAgICAgICAgICAgICAgICBJZiBVQm91bmQocGFydHMpID49IDEgVGhlbgogICAgICAgICAgICAgICAgICAgICAgICAgICAgRGltIHBpVmFsIEFzIFN0cmluZwogICAgICAgICAgICAgICAgICAgICAgICAgICAgcGlWYWwgPSBUcmltKHBhcnRzKFVCb3VuZChwYXJ0cykpKQogICAgICAgICAgICAgICAgICAgICAgICAgICAgSWYgTGVuKHBpVmFsKSA+PSA0IFRoZW4KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICByZXN1bHQgPSBwaVZhbAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIEdvVG8gVHJvdXZlCiAgICAgICAgICAgICAgICAgICAgICAgICAgICBFbmQgSWYKICAgICAgICAgICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICBFbmQgSWYKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgSWYgTGVmdChVQ2FzZSh2YWxldXIpLCA0KSA9ICJTVUFNIiBBbmQgTGVuKHZhbGV1cikgPj0gOCBUaGVuCiAgICAgICAgICAgICAgICAgICAgcmVzdWx0ID0gdmFsZXVyOiBHb1RvIFRyb3V2ZQogICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICBJZiBMZWZ0KFVDYXNlKHZhbGV1ciksIDQpID0gIk5TUi8iIEFuZCBMZW4odmFsZXVyKSA+PSA4IFRoZW4KICAgICAgICAgICAgICAgICAgICByZXN1bHQgPSB2YWxldXI6IEdvVG8gVHJvdXZlCiAgICAgICAgICAgICAgICBFbmQgSWYKICAgICAgICAgICAgICAgIElmIExlZnQoVUNhc2UodmFsZXVyKSwgMikgPSAiUUciIEFuZCBMZW4odmFsZXVyKSA+PSA4IFRoZW4KICAgICAgICAgICAgICAgICAgICByZXN1bHQgPSB2YWxldXI6IEdvVG8gVHJvdXZlCiAgICAgICAgICAgICAgICBFbmQgSWYKICAgICAgICAgICAgTmV4dCBqCiAgICAgICAgTmV4dCBpCiAgICBOZXh0IHdzCiAgICAKVHJvdXZlOgogICAgVHJvdXZlck51bWVyb1BJID0gcmVzdWx0CkVuZCBGdW5jdGlvbgoKCkZ1bmN0aW9uIE5ldHRveWVyTm9tRmljaGllcihub20gQXMgU3RyaW5nKSBBcyBTdHJpbmcKICAgIERpbSByZXN1bHQgQXMgU3RyaW5nCiAgICByZXN1bHQgPSBub20KICAgIHJlc3VsdCA9IFJlcGxhY2UocmVzdWx0LCAiLyIsICItIikKICAgIHJlc3VsdCA9IFJlcGxhY2UocmVzdWx0LCAiXCIsICItIikKICAgIHJlc3VsdCA9IFJlcGxhY2UocmVzdWx0LCAiOiIsICItIikKICAgIHJlc3VsdCA9IFJlcGxhY2UocmVzdWx0LCAiKiIsICIiKQogICAgcmVzdWx0ID0gUmVwbGFjZShyZXN1bHQsICI/IiwgIiIpCiAgICByZXN1bHQgPSBSZXBsYWNlKHJlc3VsdCwgIiIiIiwgIiIpCiAgICByZXN1bHQgPSBSZXBsYWNlKHJlc3VsdCwgIjwiLCAiIikKICAgIHJlc3VsdCA9IFJlcGxhY2UocmVzdWx0LCAiPiIsICIiKQogICAgcmVzdWx0ID0gUmVwbGFjZShyZXN1bHQsICJ8IiwgIi0iKQogICAgTmV0dG95ZXJOb21GaWNoaWVyID0gVHJpbShyZXN1bHQpCkVuZCBGdW5jdGlvbgo=";
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
+  const blob = new Blob([bytes], {type:'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'Artextyl_ExportPDF.bas';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 3000);
+}
+
+// ══════════════════════════════════════════
+// EXCEL → PDF CONVERSION
+// ══════════════════════════════════════════
+const excelPdfFiles = [];
+let generatedPdfBlob = null;
+
+function addExcelFiles(input){
+  const files = Array.from(input.files);
+  files.forEach(f => {
+    const id = 'epdf_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+    excelPdfFiles.push({file:f, id});
+    const list = document.getElementById('excel-pdf-list');
+    const size = f.size > 1024*1024 ? (f.size/1024/1024).toFixed(1)+'MB' : (f.size/1024).toFixed(0)+'KB';
+    const div = document.createElement('div');
+    div.className = 'pfi-item';
+    div.id = 'epdf-item-'+id;
+    div.innerHTML = `<span style="font-size:16px">📊</span>
+      <span class="pfi-item-name">${f.name}</span>
+      <span class="pfi-item-size">${size}</span>
+      <button class="pfi-item-del" onclick="removeExcelPdfFile('${id}')" title="Supprimer">✕</button>`;
+    list.appendChild(div);
+  });
+  input.value = '';
+  checkPdfBtn();
+}
+
+function removeExcelPdfFile(id){
+  const idx = excelPdfFiles.findIndex(f=>f.id===id);
+  if(idx>=0) excelPdfFiles.splice(idx,1);
+  const el = document.getElementById('epdf-item-'+id);
+  if(el) el.remove();
+  checkPdfBtn();
+}
+
+function checkPdfBtn(){
+  document.getElementById('btn-pdf-convert').disabled = excelPdfFiles.length === 0;
+}
+
+function resetPdfTool(){
+  excelPdfFiles.length = 0;
+  document.getElementById('excel-pdf-list').innerHTML = '';
+  document.getElementById('pdf-pi-number').value = '';
+  document.getElementById('res-pdf').classList.remove('show');
+  hideSt('st-pdf');
+  generatedPdfBlob = null;
+  checkPdfBtn();
+}
+
+async function convertExcelToPDF(){
+  document.getElementById('btn-pdf-convert').disabled = true;
+  document.getElementById('res-pdf').classList.remove('show');
+  showSt('st-pdf','info','Lecture des fichiers Excel...',true);
+
+  try{
+    // Load jsPDF dynamically
+    if(!window.jspdf){
+      showSt('st-pdf','info','Chargement des bibliothèques...',true);
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    let isFirstPage = true;
+    let pageCount = 0;
+    const piNumber = document.getElementById('pdf-pi-number').value.trim();
+
+    for(let fi=0; fi<excelPdfFiles.length; fi++){
+      const {file} = excelPdfFiles[fi];
+      showSt('st-pdf','info',`Traitement de ${file.name}...`,true);
+
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array', cellDates:true});
+
+      // Process each sheet
+      for(let si=0; si<wb.SheetNames.length; si++){
+        const sheetName = wb.SheetNames[si];
+        const ws = wb.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+
+        if(!data || data.length === 0) continue;
+
+        // Skip empty sheets
+        const hasData = data.some(row => row.some(cell => cell !== ''));
+        if(!hasData) continue;
+
+        // Add new page (except for very first)
+        if(!isFirstPage){
+          doc.addPage();
+        }
+        isFirstPage = false;
+        pageCount++;
+
+        // Page header
+        const pageTitle = wb.SheetNames.length > 1 
+          ? `${file.name.replace(/\.(xlsx|xls)$/i,'')} — ${sheetName}`
+          : file.name.replace(/\.(xlsx|xls)$/i,'');
+        
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        doc.text(pageTitle, 10, 8);
+        if(piNumber){
+          doc.setFontSize(10);
+          doc.setTextColor(20);
+          doc.setFont(undefined,'bold');
+          doc.text('N° PI: '+piNumber, 200, 8, {align:'right'});
+          doc.setFont(undefined,'normal');
+        }
+        doc.setTextColor(0);
+
+        // Filter out completely empty rows
+        const cleanData = data.filter(row => row.some(cell => String(cell).trim() !== ''));
+        if(cleanData.length === 0) continue;
+
+        // Build table - first row as header if it looks like a header
+        const headers = cleanData[0].map(h => String(h||''));
+        const rows = cleanData.slice(1).map(row => 
+          headers.map((_, i) => {
+            const val = row[i];
+            if(val instanceof Date) return val.toLocaleDateString('fr-FR');
+            return String(val||'');
+          })
+        );
+
+        // Auto-size columns
+        doc.autoTable({
+          head: [headers],
+          body: rows,
+          startY: 12,
+          styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+          headStyles: { fillColor: [26,25,22], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+          alternateRowStyles: { fillColor: [248,247,244] },
+          margin: { left: 8, right: 8 },
+          tableWidth: 'auto',
+          theme: 'grid',
+          didDrawPage: function(d){
+            // Footer with page number
+            doc.setFontSize(7);
+            doc.setTextColor(150);
+            doc.text(
+              `Page ${doc.internal.getCurrentPageInfo().pageNumber}`,
+              doc.internal.pageSize.width/2, 
+              doc.internal.pageSize.height-5,
+              {align:'center'}
+            );
+          }
+        });
+      }
+    }
+
+    if(pageCount === 0){
+      throw new Error('Aucune donnée trouvée dans les fichiers Excel.');
+    }
+
+    // Generate blob
+    const pdfName = piNumber ? piNumber+'.pdf' : excelPdfFiles[0].file.name.replace(/\.(xlsx|xls)$/i,'.pdf');
+    generatedPdfBlob = doc.output('blob');
+
+    // Show result
+    document.getElementById('pdf-preview').innerHTML = `
+      <div style="padding:12px;background:var(--gbg);border:1px solid var(--gbd);border-radius:8px;font-size:13px">
+        <strong style="color:var(--green)">✅ PDF créé avec succès</strong><br>
+        <small style="color:var(--t2)">
+          📄 ${pageCount} page(s) · 
+          📊 ${excelPdfFiles.length} fichier(s) Excel · 
+          📁 Nom: <strong>${pdfName}</strong>
+        </small>
+      </div>`;
+    document.getElementById('btn-dl-pdf').setAttribute('data-name', pdfName);
+    document.getElementById('res-pdf').classList.add('show');
+    showSt('st-pdf','ok',`✅ PDF généré — ${pageCount} page(s)`);
+
+  }catch(e){
+    showSt('st-pdf','err','⚠ Erreur: '+e.message);
+  } finally {
+    document.getElementById('btn-pdf-convert').disabled = false;
+    checkPdfBtn();
+  }
+}
+
+function downloadPDF(){
+  if(!generatedPdfBlob) return;
+  const name = document.getElementById('btn-dl-pdf').getAttribute('data-name') || 'export.pdf';
+  const url = URL.createObjectURL(generatedPdfBlob);
+  const a = document.createElement('a'); a.href=url; a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
+}
+
+function loadScript(src){
+  return new Promise((res,rej)=>{
+    if(document.querySelector(`script[src="${src}"]`)){ res(); return; }
+    const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej;
+    document.head.appendChild(s);
+  });
+}
+
+// ══════════════════════════════════════════
+// PASSWORD
+// ══════════════════════════════════════════
+(function(){
+  const PASS='100200', KEY='artextyl_auth';
+  if(sessionStorage.getItem(KEY)==='ok') return;
+  const o=document.createElement('div');
+  o.style.cssText='position:fixed;inset:0;background:#1a1916;z-index:9999;display:flex;align-items:center;justify-content:center';
+  o.innerHTML=`<div style="background:#fff;border-radius:16px;padding:2.5rem 2rem;max-width:340px;width:90%;text-align:center;box-shadow:0 25px 50px rgba(0,0,0,.4)">
+    <div style="font-size:30px;font-weight:800;letter-spacing:-1.5px;margin-bottom:4px">Artextyl</div>
+    <div style="font-size:13px;color:#6b6860;margin-bottom:1.75rem">Import Production Tool</div>
+    <input id="pw-i" type="password" placeholder="Mot de passe" autofocus
+      style="width:100%;padding:11px 14px;border:1.5px solid #e5e2db;border-radius:8px;font-size:15px;margin-bottom:8px;outline:none;text-align:center;letter-spacing:6px"
+      onkeydown="if(event.key==='Enter')chkPw()">
+    <div id="pw-e" style="color:#dc2626;font-size:12px;min-height:16px;margin-bottom:10px"></div>
+    <button onclick="chkPw()" style="width:100%;padding:12px;background:#1a1916;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Accéder →</button>
+  </div>`;
+  document.body.appendChild(o);
+  window.chkPw=function(){
+    if(document.getElementById('pw-i').value===PASS){
+      sessionStorage.setItem(KEY,'ok'); o.remove();
+    } else {
+      document.getElementById('pw-e').textContent='❌ Mot de passe incorrect';
+      document.getElementById('pw-i').value='';
+      document.getElementById('pw-i').focus();
+    }
+  };
+})();
+</script>
+
+<!-- PASSWORD OVERLAY SCRIPT already above -->
+</body>
+</html>
