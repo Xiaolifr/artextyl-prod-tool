@@ -243,16 +243,16 @@ td.cc{background:#eff6ff}
       <div class="fcols">QTY PFI · PRICE FINAL<br>TOTAUX · REGLEMENT · ETD</div>
     </div>
     <div class="fs" style="border-right:none">
-      <div class="ftag tc">IA — CI / BL / PL</div>
+      <div class="ftag tc">IA — Weight Note</div>
       <div class="ftitle">Shipping Docs</div>
-      <div class="fcols">QTY FINAL · N° CI<br>ETD FINAL · ETA · MONTANT</div>
+      <div class="fcols">QTY FINAL (groupée)<br>ETD FINAL · ETA · MONTANT</div>
     </div>
   </div>
 
   <!-- TABS -->
   <div class="tabs">
     <button class="tab active" onclick="goTab('pfi')"><span class="snum">1</span> PFI — Proforma Invoice</button>
-    <button class="tab" onclick="goTab('ci')"><span class="snum">2</span> CI / BL / PL</button>
+    <button class="tab" onclick="goTab('ci')"><span class="snum">2</span> Weight Note / CI / BL / PL</button>
     <button class="tab" onclick="goTab('hist')"><span class="snum" style="background:#e5e2db">↺</span> Historique</button>
   </div>
 
@@ -313,13 +313,23 @@ td.cc{background:#eff6ff}
   <div id="tab-ci" class="section">
     <div class="card">
       <div class="card-head">
-        <div class="card-title">🚢 Charger les documents shipping + tableau Excel</div>
+        <div class="card-title">⚖️ Charger Weight Note + documents shipping + tableau Excel</div>
         <button class="btn btn-red" onclick="resetAll('ci')" style="font-size:11px;padding:5px 10px">🗑 Vider tout</button>
       </div>
 
       <div class="upload-section">
-        <div class="upload-label">Documents shipping</div>
+        <div class="upload-label">Documents shipping — WEIGHT NOTE en priorité pour les quantités finales</div>
         <div class="upload-grid">
+          <div class="fslot" id="dz-wn" onclick="pickFile('f-wn')">
+            <input type="file" id="f-wn" accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" onchange="slotFile(this,'dz-wn','wn')">
+            <div class="fslot-icon">⚖️</div>
+            <div class="fslot-info">
+              <div class="fslot-label">Weight Note — SOURCE QUANTITÉS</div>
+              <div class="fslot-sub">.xlsx · .pdf · image</div>
+              <div class="fslot-name" id="fn-wn"></div>
+            </div>
+            <button class="fslot-clear" onclick="clearSlot(event,'dz-wn','f-wn','fn-wn','wn')">✕</button>
+          </div>
           <div class="fslot" id="dz-ci" onclick="pickFile('f-ci')">
             <input type="file" id="f-ci" accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" onchange="slotFile(this,'dz-ci','ci')">
             <div class="fslot-icon">🧾</div>
@@ -350,16 +360,6 @@ td.cc{background:#eff6ff}
             </div>
             <button class="fslot-clear" onclick="clearSlot(event,'dz-bl','f-bl','fn-bl','bl')">✕</button>
           </div>
-          <div class="fslot" id="dz-wn" onclick="pickFile('f-wn')">
-            <input type="file" id="f-wn" accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" onchange="slotFile(this,'dz-wn','wn')">
-            <div class="fslot-icon">⚖️</div>
-            <div class="fslot-info">
-              <div class="fslot-label">Weight Note</div>
-              <div class="fslot-sub">.xlsx · .pdf · image</div>
-              <div class="fslot-name" id="fn-wn"></div>
-            </div>
-            <button class="fslot-clear" onclick="clearSlot(event,'dz-wn','f-wn','fn-wn','wn')">✕</button>
-          </div>
         </div>
       </div>
 
@@ -380,7 +380,7 @@ td.cc{background:#eff6ff}
       </div>
 
       <button class="btn btn-dark btn-full" id="btn-ci" onclick="runCI()" disabled>
-        ✨ Extraire CI/BL/PL et compléter IM5
+        ✨ Extraire Weight Note et compléter IM5
       </button>
     </div>
 
@@ -601,11 +601,8 @@ function toB64(file){
 // ══════════════════════════════════════════
 // CLAUDE API CALL
 // ══════════════════════════════════════════
-// Split PDF into page ranges for large documents
 async function splitPDFPages(file, pagesPerBatch){
-  // We can't actually split PDFs in browser - instead we send the full PDF
-  // but instruct Claude to focus on specific page ranges
-  return null; // handled via page range prompts
+  return null;
 }
 
 async function callClaudeWithPageRange(system, fileObjs, pageRange){
@@ -623,8 +620,6 @@ async function callClaudeWithPageRange(system, fileObjs, pageRange){
       content.push({type:'text', text:'[Fichier Excel — extraire toutes les données: styles, couleurs, quantités par couleur, prix, ETD, numéros de documents]'});
     }
   }
-  // Add page range instruction if specified
-  // Always skip page 1 (summary) and start from detail pages
   const rangeInstruction = pageRange 
     ? `IMPORTANT: Analyse UNIQUEMENT les pages ${pageRange.from} à ${pageRange.to} de ce document. Page 1 = résumé à ignorer. Les pages de détails commencent à partir de la page 2 ou 3.`
     : `IMPORTANT: Ignore la page 1 qui est un résumé. Lis les pages de détails (page 2, 3, etc.) qui contiennent les couleurs, tailles et quantités exactes par ligne.`;
@@ -645,7 +640,6 @@ async function callClaude(system, fileObjs){
   return callClaudeWithPageRange(system, fileObjs, null);
 }
 
-// Merge multiple PFI extraction results into one
 function mergePFIResults(results){
   if(!results.length) return null;
   const base = {...results[0]};
@@ -656,7 +650,6 @@ function mergePFIResults(results){
     if(r.articles) base.articles.push(...r.articles);
     base.total_qty += r.total_qty||0;
     base.total_amount += r.total_amount||0;
-    // Keep pi_numero, payment_terms etc from first result
   }
   return base;
 }
@@ -687,30 +680,27 @@ Si le document contient plusieurs pages de détails, traite TOUTES les pages de 
 JSON compact - retourne UNIQUEMENT ce JSON sans markdown:
 {"pi_numero":"","pi_date":"","fournisseur":"","code_frs":"","payment_terms":"","shipment_terms":"","articles":[{"ref_key":"","style_complet":"","gender":"","color":"","qty_pfi":0,"unit_price":0,"etd":""}],"total_qty":0,"total_amount":0,"currency":"USD"}`;
 
-const SYS_CI = `Tu es expert en commerce international textile. Analyse ces documents shipping (CI, PL, BL, Weight Note).
+const SYS_CI = `Tu es expert en commerce international textile. Analyse ces documents shipping (Weight Note, CI, PL, BL).
 
-RÈGLES D'EXTRACTION - CRITIQUE:
-- CHAQUE article = STYLE + COULEUR + GENRE (une ligne par combinaison)
-- REF: nom du style (ex: TOXIQUE, RICHYWOOD, ROYAUTE)
-- COLOR: couleur exacte (ex: BLACK, DARK GREY, NAVY, etc.)
-- GENDER: genre (MEN, LADY, BOY, GIRL)
-- QTY: quantité pour CETTE combinaison (par la Weight Note ou Packing List détail)
-- Une quantité UNIQUE par style/couleur/genre, pas une quantité par style
+FOCUS WEIGHT NOTE POUR QUANTITÉS FINALES:
+- Weight Note = source PRIMAIRE pour QTY FINAL par couleur/référence/gender
+- Extrait CHAQUE LIGNE du Weight Note avec: ref_key, gender, color, qty_final
+- Groupe par ref_key + gender + couleur
 
-SOURCES:
-- Weight Note = détail par couleur ✓ PRIORITAIRE
-- Packing List = peut avoir le détail par couleur
-- CI = totaux par style seulement
-- Ne PAS utiliser les totaux par style pour tous les articles
+EXTRACTION:
+Pour chaque article (par couleur, gender, style):
+- ref_key: style/référence SANS les codes (même logique que PFI)
+- gender: MEN/LADY/BOY/GIRL si présent
+- color: couleur exacte
+- qty_final: quantité TOTALE du Weight Note pour cette couleur
+- unit_price: prix du CI si disponible
+- amount: qty × price
 
 Retourne UNIQUEMENT ce JSON valide sans markdown:
-{"ci_numero":"","ci_date":"","booking":"","vessel":"","port_loading":"","port_discharge":"","etd_final":"","eta":"","container":"","seal":"","articles":[{"ref_key":"","color":"","gender":"","qty_final":0,"unit_price":0,"amount":0,"ctns":0}],"total_qty":0,"total_ctns":0,"total_amount":0,"gross_weight":0,"net_weight":0,"cbm":0,"currency":"USD","checks":{"qty_ci_pl_match":true,"weight_bl_pl_match":true,"booking_consistent":true}}`;
+{"ci_numero":"","ci_date":"","booking":"","vessel":"","port_loading":"","port_discharge":"","etd_final":"","eta":"","container":"","seal":"","articles":[{"ref_key":"","gender":"","color":"","qty_final":0,"unit_price":0,"amount":0,"ctns":0}],"total_qty":0,"total_ctns":0,"total_amount":0,"gross_weight":0,"net_weight":0,"cbm":0,"currency":"USD","checks":{"qty_wn_ci_match":true,"weight_bl_match":true,"booking_consistent":true}}`;
 
 // ══════════════════════════════════════════
 // FILL EXCEL IM5
-// ══════════════════════════════════════════
-// ══════════════════════════════════════════
-// CONFIRMATION DIALOG (async/await)
 // ══════════════════════════════════════════
 let confirmResolve = null;
 
@@ -730,37 +720,29 @@ async function askConfirm(excelInfo, pfiInfo, hint){
 // ══════════════════════════════════════════
 // SMART MATCHING
 // ══════════════════════════════════════════
-// ══ MOTS BLOQUANTS : doivent être présents dans les DEUX ou absents des DEUX
 const BLOCK_KW = ['GTX','BASIC','HOOD','LONG','SHORT'];
 
-// Tokenize: split by spaces/dashes/slashes, uppercase
 function tokenize(s){
   return (s||'').toUpperCase().trim().split(/[\s_\-\/]+/).filter(w=>w.length>0);
 }
 
-// Scoring - L'ORDRE N'A PAS D'IMPORTANCE, seule la présence des mots compte
 function matchScore(excelRow, art){
-  // Mots de la REF Excel (ex: ["AURELIEN","GTX"] ou ["REINE"] ou ["CALIX"])
   const exRefTokens   = tokenize(excelRow.ref || '');
   const exGender      = (excelRow.gender||'').toUpperCase().trim();
   const exColor       = (excelRow.color||'').toUpperCase().replace(/[\s\/\-]+/g,'');
 
-  // Tous les mots du PFI (style_complet contient tout: ref, genre, marque, code)
   const artFull       = ((art.style_complet||'')+' '+(art.ref_key||'')+' '+(art.description||'')+' '+(art.gender||'')).toUpperCase();
   const artFullTokens = tokenize(artFull);
   const artColor      = (art.color||'').toUpperCase().replace(/[\s\/\-]+/g,'');
 
-  // ── ETAPE 1: Chaque mot de la REF Excel doit exister dans le PFI (ordre libre)
   for(const word of exRefTokens){
-    if(word.length <= 1) continue; // ignorer lettres seules
+    if(word.length <= 1) continue;
     if(!artFullTokens.includes(word)){
       return {score:-1, disqualified:true,
               reason:'Mot "'+word+'" absent du PFI "'+artFull.substring(0,50)+'"'};
     }
   }
 
-  // ── ETAPE 2: Mots bloquants symétriques
-  // Si le PFI a GTX mais pas l'Excel REF → disqualifié aussi
   for(const kw of BLOCK_KW){
     const inEx  = exRefTokens.includes(kw);
     const inArt = artFullTokens.includes(kw);
@@ -770,16 +752,14 @@ function matchScore(excelRow, art){
     }
   }
 
-  let score = 30; // base: tous les mots REF trouvés
+  let score = 30;
 
-  // ── ETAPE 3: COULEUR (+30 exacte, +15 partielle, -20 différente)
   if(exColor && artColor){
     if(exColor === artColor) score += 30;
     else if(exColor.includes(artColor) || artColor.includes(exColor)) score += 15;
     else score -= 20;
   }
 
-  // ── ETAPE 4: GENRE — obligatoire pour AUTO (score≥60)
   if(exGender){
     const genderAliases = {
       'MEN':  ['MEN','MENS',"MEN'S",'MALE','HOMME'],
@@ -791,7 +771,7 @@ function matchScore(excelRow, art){
     const aliases = genderAliases[exGender] || [exGender];
     const genderFound = aliases.some(a => artFullTokens.includes(a));
     if(genderFound) score += 20;
-    else score -= 30; // genre absent → empêche AUTO
+    else score -= 30;
   }
 
   return {score, disqualified:false};
@@ -864,11 +844,9 @@ async function fillExcel(excelFile, fillType, extracted, qtyPfiCol, interactive=
     for(let row=2;row<=maxRow;row++){
       const piV=String(getV(row,C.N_PI)||'').trim();
       if(!piV) continue;
-      // Matching PI: exact OU les chiffres sont identiques (les lettres peuvent différer)
       function extractNums(s){ return s.replace(/[^0-9]/g,''); }
       const piNums = extractNums(pi);
       const piVNums = extractNums(piV);
-      // Match si exact, ou si les chiffres sont identiques, ou si l'un contient les chiffres de l'autre
       const piMatch = piV === pi || 
         (piNums.length >= 4 && piVNums.length >= 4 && (piNums === piVNums || piNums.includes(piVNums) || piVNums.includes(piNums)));
       if(!piMatch) continue;
@@ -881,11 +859,8 @@ async function fillExcel(excelFile, fillType, extracted, qtyPfiCol, interactive=
       const qtyV  =parseFloat(getV(row,C.QTY)||0);
       const refComplet=String(getV(row,C.REF_COMPLET)||refV).trim();
 
-      // FRS check désactivé - trop de codes frs différents
-
       const excelRow = {ref:refV, color:colorV, gender:genderV, refComplet};
 
-      // Score all PFI articles
       const scored = arts.map(art=>({art, ...matchScore(excelRow, art)}))
         .filter(r=>!r.disqualified && r.score>0)
         .sort((a,b)=>b.score-a.score);
@@ -901,13 +876,11 @@ async function fillExcel(excelFile, fillType, extracted, qtyPfiCol, interactive=
       const best = scored[0];
       debugLog.push('    Best: '+best.art.ref_key+' '+(best.art.color||'')+ ' score='+best.score);
 
-      // HIGH confidence (score >= 60) → fill directly
       if(best.score >= 60){
         applyPFI(row, best.art, pt, qtyV, qtyPfiCol);
         filled.push({row,ref:refV,color:colorV,score:best.score,auto:true});
         debugLog.push('    ✅ AUTO FILL score='+best.score);
       }
-      // MEDIUM confidence (30-59) → ask user
       else if(best.score >= 20 && interactive){
         debugLog.push('    ❓ Score moyen ('+best.score+') → confirmation demandée');
         const excelInfo = `<strong>${refV}</strong><br>${genderV} · ${colorV}<br><small style="color:var(--t2)">${refComplet}</small>`;
@@ -923,7 +896,6 @@ async function fillExcel(excelFile, fillType, extracted, qtyPfiCol, interactive=
           debugLog.push('    ⏭ Skipped by user');
         }
       }
-      // LOW confidence → skip silently
       else {
         notFound.push({row,ref:refV,color:colorV,reason:'low confidence score='+best.score});
         debugLog.push('    ⚠️ Score trop faible ('+best.score+') → ignoré');
@@ -932,58 +904,68 @@ async function fillExcel(excelFile, fillType, extracted, qtyPfiCol, interactive=
     debugLog.push('📊 Rows avec ce PI: '+piCount+' | Remplis: '+filled.length+' | Sautés: '+skipped.length);
 
   } else {
-    // CI fill - matcher par BOOKING + REF + COLOR + GENDER
+    // ═══════════════════════════════════════════════════════════════
+    // CI FILL — GROUPER PAR REF+GENDER+COULEUR DEPUIS WEIGHT NOTE
+    // ═══════════════════════════════════════════════════════════════
     const booking=extracted.booking||'';
     const ci=extracted.ci_numero||'';
     const arts=extracted.articles||[];
-    debugLog.push('🔍 BOOKING: "'+booking+'" | Articles: '+arts.length);
     
+    debugLog.push('🔍 BOOKING: "'+booking+'"');
+    debugLog.push('📦 Weight Note articles: '+arts.map(a=>'['+a.ref_key+' '+a.gender+' '+a.color+' qty='+a.qty_final+']').join(' '));
+
+    // Grouper les articles par ref_key + gender + couleur
+    const grouped = {};
+    for(const art of arts){
+      const key = (art.ref_key||'').toUpperCase() + '|' + (art.gender||'').toUpperCase() + '|' + (art.color||'').toUpperCase();
+      if(!grouped[key]){
+        grouped[key] = {ref_key: art.ref_key, gender: art.gender, color: art.color, qty_final: 0, unit_price: art.unit_price, amount: 0};
+      }
+      grouped[key].qty_final += art.qty_final || 0;
+      grouped[key].amount += art.amount || 0;
+    }
+    
+    debugLog.push('📊 Groupés en '+Object.keys(grouped).length+' ligne(s)');
+
+    // Matcher chaque ligne Excel avec les groupes
     for(let row=2;row<=maxRow;row++){
       const bkV=String(getV(row,C.BOOKING)||'').trim();
       if(!bkV||bkV!==booking) continue;
       
       const refV=String(getV(row,C.REF)||'').trim();
-      const colorV=String(getV(row,C.COLOR)||'').trim();
       const genderV=String(getV(row,C.GENDER)||'').trim();
+      const colorV=String(getV(row,C.COLOR)||'').trim();
       const priceV=parseFloat(getV(row,C.PRICE_FINAL)||0);
       const qpfi=qtyPfiCol?parseFloat(getV(row,qtyPfiCol)||0):parseFloat(getV(row,C.QTY_PFI)||0);
-      
-      debugLog.push('  Row '+row+': REF='+refV+' COLOR='+colorV+' GENDER='+genderV);
-      
-      // Normaliser pour comparaison
-      const normalize = (s) => (s||'').toUpperCase().replace(/[\s_\/\-]+/g,'');
-      const refNorm = normalize(refV);
-      const colorNorm = normalize(colorV);
-      const genderNorm = normalize(genderV);
-      
-      let matched=false;
-      for(const art of arts){
-        const artRefNorm = normalize(art.ref_key||'');
-        const artColorNorm = normalize(art.color||'');
-        const artGenderNorm = normalize(art.gender||'MEN');
+
+      // Chercher le groupe correspondant par ref + gender + couleur
+      let found = false;
+      for(const key in grouped){
+        const grp = grouped[key];
+        const refMatch = (refV.toUpperCase().includes(grp.ref_key.toUpperCase()) || grp.ref_key.toUpperCase().includes(refV.toUpperCase()));
+        const genderMatch = genderV.toUpperCase().includes(grp.gender.toUpperCase()) || grp.gender.toUpperCase() === '';
+        const colorMatch = colorV.toUpperCase().replace(/[\s\/\-]+/g,'') === (grp.color||'').toUpperCase().replace(/[\s\/\-]+/g,'');
         
-        // Match par REF + COLOR + GENDER
-        const refMatch = refNorm && artRefNorm && (refNorm.includes(artRefNorm) || artRefNorm.includes(refNorm));
-        const colorMatch = colorNorm && artColorNorm && colorNorm === artColorNorm;
-        const genderMatch = !genderNorm || !artGenderNorm || genderNorm === artGenderNorm;
-        
-        if(refMatch && colorMatch && genderMatch){
-          debugLog.push('    ✅ Match trouvé: '+art.ref_key+' '+art.color+' '+art.gender+' → qty='+art.qty_final);
-          if(art.qty_final) setV(row,C.QTY_FINAL,art.qty_final);
-          if(art.amount) setV(row,C.BALANCE,art.amount);
+        if(refMatch && genderMatch && colorMatch){
+          debugLog.push('  Row '+row+': '+refV+' '+genderV+' '+colorV+' → MATCH groupe ['+grp.ref_key+' '+grp.gender+' '+grp.color+'] qty='+grp.qty_final);
+          
+          // Remplir QTY FINAL avec la quantité groupée
+          if(grp.qty_final) setV(row,C.QTY_FINAL,grp.qty_final);
           if(ci) setV(row,C.COMM_INVOICE,ci);
           if(extracted.etd_final){const d=parseD(extracted.etd_final);if(d)setV(row,C.ETD_FINAL,d);}
           if(extracted.eta){const d=parseD(extracted.eta);if(d)setV(row,C.ETA,d);}
-          if(qpfi&&art.qty_final) setV(row,C.BALANCE2,Math.round(art.qty_final/qpfi*10000)/10000);
-          if(priceV&&art.qty_final) setV(row,C.MONTANT_FINAL,Math.round(priceV*art.qty_final*100)/100);
-          filled.push({row,ref:refV,color:colorV});
-          matched=true; 
+          if(qpfi&&grp.qty_final) setV(row,C.BALANCE2,Math.round(grp.qty_final/qpfi*10000)/10000);
+          if(priceV&&grp.qty_final) setV(row,C.MONTANT_FINAL,Math.round(priceV*grp.qty_final*100)/100);
+          
+          filled.push({row,ref:refV,color:colorV,gender:genderV,qty:grp.qty_final});
+          found = true;
           break;
         }
       }
-      if(!matched) {
-        debugLog.push('    ❌ Pas de match');
-        notFound.push({row,ref:refV,color:colorV});
+      
+      if(!found){
+        notFound.push({row,ref:refV,color:colorV,gender:genderV,reason:'no match in weight note'});
+        debugLog.push('  Row '+row+': '+refV+' '+genderV+' '+colorV+' → ❌ NO MATCH');
       }
     }
   }
@@ -1015,17 +997,14 @@ async function runPFI(){
       
       let data;
       if(pagesPerBatch > 0){
-        // Split into page batches
         showSt('st-pfi','info',`PFI ${i+1}/${pfiFiles.length} : traitement par lots de ${pagesPerBatch} pages...`,true);
         const batchResults = [];
-        // We'll do up to 10 batches max
         const maxBatches = 10;
         for(let batch=0; batch<maxBatches; batch++){
           const fromPage = batch * pagesPerBatch + 1;
           const toPage = (batch+1) * pagesPerBatch;
           showSt('st-pfi','info',`PFI ${i+1}/${pfiFiles.length} : pages ${fromPage}-${toPage}...`,true);
           try {
-            // Wait between batches to respect rate limit (10k tokens/min)
             if(batch > 0){
               showSt('st-pfi','info',`⏳ Pause 65s pour respecter la limite API... (lot ${batch+1})`,true);
               await new Promise(r => setTimeout(r, 65000));
@@ -1037,10 +1016,9 @@ async function runPFI(){
             );
             if(batchData && batchData.articles && batchData.articles.length > 0){
               batchResults.push(batchData);
-              // If this batch returned fewer articles than expected, we've reached the end
               if(batchData.articles.length < 2) break;
             } else {
-              break; // No more articles found
+              break;
             }
           } catch(e) {
             if(e.message.includes('Unterminated') || e.message.includes('JSON')) break;
@@ -1054,14 +1032,12 @@ async function runPFI(){
       }
       showSt('st-pfi','info',`PFI ${i+1}/${pfiFiles.length} : mise à jour IM5...`,true);
       const res=await fillExcel(F.excelPfi,'pfi',data,qCol);
-      // For next PFI, use the updated blob as input
       if(i<pfiFiles.length-1){
         F.excelPfi=new File([res.blob],'updated.xlsx',{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
       }
       blobs['pfi_'+i]=res.blob;
       results.push({data,res,idx:i,name:file.name});
     }
-    // Final blob = last result
     blobs.pfi=blobs['pfi_'+(pfiFiles.length-1)];
 
     buildPFIResults(results);
@@ -1081,7 +1057,6 @@ async function runPFI(){
 function buildPFIResults(results){
   const resEl=document.getElementById('res-pfi');
   let html='<div class="card">';
-  // Tabs if multiple
   if(results.length>1){
     html+='<div class="rtabs">';
     results.forEach((r,i)=>html+=`<button class="rtab${i===0?' active':''}" onclick="showRtab('pfi',${i})" id="rtab-pfi-${i}">${r.data.pi_numero||r.name}</button>`);
@@ -1132,17 +1107,17 @@ async function runCI(){
   document.getElementById('btn-ci').disabled=true;
   const resEl=document.getElementById('res-ci');
   resEl.innerHTML=''; resEl.classList.remove('show');
-  showSt('st-ci','info','Extraction IA des documents shipping...',true);
+  showSt('st-ci','info','Extraction IA depuis Weight Note et docs shipping...',true);
 
   try{
     const docs=[
+      {file:F.wn,label:'Weight Note'},
       {file:F.ci,label:'CI - Commercial Invoice'},
       {file:F.pl,label:'PL - Packing List'},
       {file:F.bl,label:'BL - Bill of Lading'},
-      {file:F.wn,label:'Weight Note'},
     ].filter(d=>d.file);
     const data=await callClaude(SYS_CI,docs);
-    showSt('st-ci','info','Mise à jour IM5...',true);
+    showSt('st-ci','info','Mise à jour IM5 avec quantités groupées...',true);
     const qc=document.getElementById('col-ci').value;
     const qCol=qc?parseInt(qc):null;
     const res=await fillExcel(F.excelCi,'ci',data,qCol);
@@ -1151,7 +1126,7 @@ async function runCI(){
     buildCIResult(data,res);
     resEl.classList.add('show');
     showSt('st-ci','ok',`✅ ${res.filled.length} ligne(s) remplie(s) — Excel final prêt`);
-    addHist('CI/BL',data.booking||'—',data.ci_numero||'—',(data.articles||[]).length,data.total_amount,data.currency,res.filled.length);
+    addHist('Weight Note',data.booking||'—',data.ci_numero||'—',(data.articles||[]).length,data.total_amount,data.currency,res.filled.length);
   }catch(e){
     showSt('st-ci','err','⚠ '+e.message);
   } finally {
@@ -1164,24 +1139,24 @@ function buildCIResult(data,res){
   const arts=data.articles||[];
   const chk=data.checks||{};
   let html='<div class="card">';
-  html+=`<div class="legend"><div class="leg"><div class="legbox lc"></div>Rempli par IA (CI/BL)</div><div class="leg"><div class="legbox lp"></div>Rempli étape PFI</div></div>`;
+  html+=`<div class="legend"><div class="leg"><div class="legbox lc"></div>Rempli par Weight Note (groupé)</div><div class="leg"><div class="legbox lp"></div>Rempli étape PFI</div></div>`;
   html+=`<div class="sep">Informations logistiques</div><div class="fgrid">`;
   [['N° CI',data.ci_numero,'ci'],['Date CI',data.ci_date,''],['Booking',data.booking,''],['Navire',data.vessel,''],['Port chargement',data.port_loading,''],['Port décharge',data.port_discharge,''],['ETD Final',data.etd_final,'ci'],['ETA',data.eta,'ci'],['Conteneur',data.container,''],['Poids brut (kg)',data.gross_weight,''],['CBM',data.cbm,''],['Montant total',(data.currency||'USD')+' '+(data.total_amount||0).toLocaleString('fr-FR',{minimumFractionDigits:2}),'ci']].forEach(([l,v,c])=>{
     html+=`<div class="field"><label>${l}</label><input class="fval ${c}" value="${v||'—'}" readonly></div>`;
   });
   html+='</div>';
-  html+=`<div class="sep">Articles</div><div style="overflow-x:auto"><table><thead><tr><th>Style</th><th class="cc">QTY FINAL</th><th class="cc">Montant</th><th class="cc">N° CI</th><th class="cc">ETD Final</th><th class="cc">ETA</th></tr></thead><tbody>`;
-  arts.forEach(a=>{html+=`<tr><td>${a.ref_key||'—'}</td><td class="cc"><strong>${(a.qty_final||0).toLocaleString('fr-FR')}</strong></td><td class="cc">${data.currency||'USD'} ${(a.amount||0).toLocaleString('fr-FR',{minimumFractionDigits:2})}</td><td class="cc">${data.ci_numero||'—'}</td><td class="cc">${data.etd_final||'—'}</td><td class="cc">${data.eta||'—'}</td></tr>`;});
+  html+=`<div class="sep">Articles du Weight Note (REF + GENDER + COULEUR)</div><div style="overflow-x:auto"><table><thead><tr><th>Ref</th><th>Gender</th><th>Couleur</th><th class="cc">QTY FINAL (groupée)</th><th class="cc">Montant</th><th class="cc">Ctns</th></tr></thead><tbody>`;
+  arts.forEach(a=>{html+=`<tr><td><strong>${a.ref_key||'—'}</strong></td><td>${a.gender||'—'}</td><td>${a.color||'—'}</td><td class="cc"><strong>${(a.qty_final||0).toLocaleString('fr-FR')}</strong></td><td class="cc">${data.currency||'USD'} ${(a.amount||0).toLocaleString('fr-FR',{minimumFractionDigits:2})}</td><td class="cc">${a.ctns||'—'}</td></tr>`;});
   if(!arts.length) html+='<tr><td colspan="6" style="text-align:center;padding:1rem;color:#9c9a94">Aucun article</td></tr>';
   html+='</tbody></table></div>';
   html+=`<div class="sep">Vérification croisée</div><div class="chklist">`;
-  [['Quantités CI = PL = Weight Note',chk.qty_ci_pl_match],['Poids brut PL = BL',chk.weight_bl_pl_match],['N° Booking cohérent',chk.booking_consistent]].forEach(([l,ok])=>{
+  [['Quantités Weight Note = CI',chk.qty_wn_ci_match],['Poids BL = PL',chk.weight_bl_match],['N° Booking cohérent',chk.booking_consistent]].forEach(([l,ok])=>{
     html+=`<div class="chkrow"><span>${l}</span><span class="bdg ${ok===true?'b-ok':ok===false?'b-err':'b-neu'}">${ok===true?'✓ OK':ok===false?'✗ Écart':'— ?'}</span></div>`;
   });
   html+='</div>';
   html+=`<div class="sep">Résultat IM5</div><div class="sumbox"><strong>${res.filled.length} ligne(s) remplie(s)</strong>`;
-  if(res.filled.length) html+=`<br><small style="color:var(--t2)">${res.filled.map(f=>'#'+f.row+' '+f.ref+' '+f.color).join(' · ')}</small>`;
-  if(res.notFound.length) html+=`<br><span style="color:var(--amber);font-size:12px">⚠ ${res.notFound.length} non trouvée(s)</span>`;
+  if(res.filled.length) html+=`<br><small style="color:var(--t2)">${res.filled.map(f=>'#'+f.row+' '+f.ref+' '+f.gender+' '+f.color+' (qty='+f.qty+')').join(' · ')}</small>`;
+  if(res.notFound.length) html+=`<br><span style="color:var(--amber);font-size:12px">⚠ ${res.notFound.length} non trouvée(s) dans Weight Note</span>`;
   if(res.debugLog.length) html+=`<div class="dbgbox">${res.debugLog.join('<br>')}</div>`;
   html+='</div>';
   html+=`<div class="brow"><button class="btn btn-ghost" onclick="resetAll('ci')">↩ Vider tout</button><button class="btn btn-green" onclick="dlExcel('ci')">⬇ Télécharger Excel final</button></div>`;
@@ -1194,7 +1169,7 @@ function buildCIResult(data,res){
 // ══════════════════════════════════════════
 function dlExcel(type){
   if(!blobs[type]) return;
-  const name=type==='pfi'?'PROD_IM5_PFI_updated.xlsx':'PROD_IM5_CI_final.xlsx';
+  const name=type==='pfi'?'PROD_IM5_PFI_updated.xlsx':'PROD_IM5_WN_final.xlsx';
   const url=URL.createObjectURL(blobs[type]);
   const a=document.createElement('a');a.href=url;a.download=name;a.click();
   setTimeout(()=>URL.revokeObjectURL(url),3000);
@@ -1207,7 +1182,7 @@ function addHist(type,ref,frs,arts,amt,cur,filled){
   const body=document.getElementById('hist-body');
   if(histFirst){body.innerHTML='';histFirst=false;}
   const now=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-  const tag=type==='PFI'?'<span class="bdg b-ok">PFI</span>':'<span class="bdg" style="background:var(--bbg);color:var(--blue)">CI/BL</span>';
+  const tag=type==='PFI'?'<span class="bdg b-ok">PFI</span>':type==='Weight Note'?'<span class="bdg" style="background:var(--bbg);color:var(--blue)">Weight Note</span>':'<span class="bdg" style="background:var(--bbg);color:var(--blue)">CI/BL</span>';
   body.insertAdjacentHTML('afterbegin',`<tr><td>${now}</td><td>${tag}</td><td><strong>${ref}</strong></td><td>${frs}</td><td>${arts}</td><td>${cur||'USD'} ${Number(amt||0).toLocaleString('fr-FR',{minimumFractionDigits:2})}</td><td><span class="bdg b-ok">${filled} ligne(s)</span></td></tr>`);
 }
 
@@ -1241,6 +1216,5 @@ function addHist(type,ref,frs,arts,amt,cur,filled){
 })();
 </script>
 
-<!-- PASSWORD OVERLAY SCRIPT already above -->
 </body>
 </html>
