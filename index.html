@@ -503,8 +503,7 @@ function renderPFIItem(f, id){
   list.appendChild(div);
 }
 
-function removePFI(btn){
-  const id = typeof btn === 'string' ? btn : btn.dataset.id;
+function removePFI(id){
   const idx = pfiFiles.findIndex(p=>p.id===id);
   if(idx>=0) pfiFiles.splice(idx,1);
   const el = document.getElementById('pfi-item-'+id);
@@ -690,15 +689,22 @@ JSON compact - retourne UNIQUEMENT ce JSON sans markdown:
 
 const SYS_CI = `Tu es expert en commerce international textile. Analyse ces documents shipping (CI, PL, BL, Weight Note).
 
-IMPORTANT: 
-- Extrais UN article PAR STYLE PAR COULEUR PAR GENDER avec sa quantité exacte
-- Le N° CI = numéro de la Commercial Invoice (ex: SUAM261802)
-- Le booking = numéro de booking (ex: B6101)
-- qty_final = quantité exacte pour cette couleur/gender (pas le total)
-- Pour la vérification croisée: compare les cartons, poids, quantités entre CI, PL, BL et Weight Note
+RÈGLES D'EXTRACTION - CRITIQUE:
+- CHAQUE article = STYLE + COULEUR + GENRE (une ligne par combinaison)
+- REF: nom du style (ex: TOXIQUE, RICHYWOOD, ROYAUTE)
+- COLOR: couleur exacte (ex: BLACK, DARK GREY, NAVY, etc.)
+- GENDER: genre (MEN, LADY, BOY, GIRL)
+- QTY: quantité pour CETTE combinaison (par la Weight Note ou Packing List détail)
+- Une quantité UNIQUE par style/couleur/genre, pas une quantité par style
+
+SOURCES:
+- Weight Note = détail par couleur ✓ PRIORITAIRE
+- Packing List = peut avoir le détail par couleur
+- CI = totaux par style seulement
+- Ne PAS utiliser les totaux par style pour tous les articles
 
 Retourne UNIQUEMENT ce JSON valide sans markdown:
-{"ci_numero":"","ci_date":"","booking":"","vessel":"","port_loading":"","port_discharge":"","etd_final":"","eta":"","container":"","seal":"","articles":[{"ref_key":"","gender":"","color":"","qty_final":0,"unit_price":0,"amount":0,"ctns":0}],"total_qty":0,"total_ctns":0,"total_amount":0,"gross_weight":0,"net_weight":0,"cbm":0,"currency":"USD","checks":{"qty_ci_pl_match":true,"qty_pl_bl_match":true,"qty_wn_bl_match":true,"weight_bl_pl_match":true,"weight_bl_wn_match":true,"ctns_match":true,"container_match":true,"seal_match":true,"notes":""}}`;
+{"ci_numero":"","ci_date":"","booking":"","vessel":"","port_loading":"","port_discharge":"","etd_final":"","eta":"","container":"","seal":"","articles":[{"ref_key":"","color":"","gender":"","qty_final":0,"unit_price":0,"amount":0,"ctns":0}],"total_qty":0,"total_ctns":0,"total_amount":0,"gross_weight":0,"net_weight":0,"cbm":0,"currency":"USD","checks":{"qty_ci_pl_match":true,"weight_bl_pl_match":true,"booking_consistent":true}}`;
 
 // ══════════════════════════════════════════
 // FILL EXCEL IM5
@@ -926,50 +932,62 @@ async function fillExcel(excelFile, fillType, extracted, qtyPfiCol, interactive=
     debugLog.push('📊 Rows avec ce PI: '+piCount+' | Remplis: '+filled.length+' | Sautés: '+skipped.length);
 
   } else {
-    // CI fill: match par BOOKING + REF + GENDER + COLOR (pas N°PI)
+    // CI fill - matcher par BOOKING + REF + COLOR + GENDER
     const booking=extracted.booking||'';
     const ci=extracted.ci_numero||'';
     const arts=extracted.articles||[];
-    debugLog.push('🔍 BOOKING: "'+booking+'"');
-    debugLog.push('📦 CI articles: '+arts.map(a=>(a.ref_key||'')+(a.gender?' '+a.gender:'')+(a.color?' '+a.color:'')+' qty='+a.qty_final).join(' | '));
-
+    debugLog.push('🔍 BOOKING: "'+booking+'" | Articles: '+arts.length);
+    
     for(let row=2;row<=maxRow;row++){
       const bkV=String(getV(row,C.BOOKING)||'').trim();
       if(!bkV||bkV!==booking) continue;
-
-      const refV   =String(getV(row,C.REF)||'').trim();
-      const colorV =String(getV(row,C.COLOR)||'').trim();
+      
+      const refV=String(getV(row,C.REF)||'').trim();
+      const colorV=String(getV(row,C.COLOR)||'').trim();
       const genderV=String(getV(row,C.GENDER)||'').trim();
-      const priceV =parseFloat(getV(row,C.PRICE_FINAL)||0);
-      const qpfi   =qtyPfiCol?parseFloat(getV(row,qtyPfiCol)||0):parseFloat(getV(row,C.QTY_PFI)||0);
-
-      debugLog.push('  Row '+row+': REF='+refV+' GENDER='+genderV+' COLOR='+colorV);
-
-      // Trouver le meilleur article CI correspondant via matchScore
-      let bestArt=null, bestScore=-999;
+      const priceV=parseFloat(getV(row,C.PRICE_FINAL)||0);
+      const qpfi=qtyPfiCol?parseFloat(getV(row,qtyPfiCol)||0):parseFloat(getV(row,C.QTY_PFI)||0);
+      
+      debugLog.push('  Row '+row+': REF='+refV+' COLOR='+colorV+' GENDER='+genderV);
+      
+      // Normaliser pour comparaison
+      const normalize = (s) => (s||'').toUpperCase().replace(/[\s_\/\-]+/g,'');
+      const refNorm = normalize(refV);
+      const colorNorm = normalize(colorV);
+      const genderNorm = normalize(genderV);
+      
+      let matched=false;
       for(const art of arts){
-        const ms=matchScore({ref:refV,gender:genderV,color:colorV,refComplet:refV},art);
-        if(!ms.disqualified && ms.score>bestScore){
-          bestScore=ms.score; bestArt=art;
+        const artRefNorm = normalize(art.ref_key||'');
+        const artColorNorm = normalize(art.color||'');
+        const artGenderNorm = normalize(art.gender||'MEN');
+        
+        // Match par REF + COLOR + GENDER
+        const refMatch = refNorm && artRefNorm && (refNorm.includes(artRefNorm) || artRefNorm.includes(refNorm));
+        const colorMatch = colorNorm && artColorNorm && colorNorm === artColorNorm;
+        const genderMatch = !genderNorm || !artGenderNorm || genderNorm === artGenderNorm;
+        
+        if(refMatch && colorMatch && genderMatch){
+          debugLog.push('    ✅ Match trouvé: '+art.ref_key+' '+art.color+' '+art.gender+' → qty='+art.qty_final);
+          if(art.qty_final) setV(row,C.QTY_FINAL,art.qty_final);
+          if(art.amount) setV(row,C.BALANCE,art.amount);
+          if(ci) setV(row,C.COMM_INVOICE,ci);
+          if(extracted.etd_final){const d=parseD(extracted.etd_final);if(d)setV(row,C.ETD_FINAL,d);}
+          if(extracted.eta){const d=parseD(extracted.eta);if(d)setV(row,C.ETA,d);}
+          if(qpfi&&art.qty_final) setV(row,C.BALANCE2,Math.round(art.qty_final/qpfi*10000)/10000);
+          if(priceV&&art.qty_final) setV(row,C.MONTANT_FINAL,Math.round(priceV*art.qty_final*100)/100);
+          filled.push({row,ref:refV,color:colorV});
+          matched=true; 
+          break;
         }
       }
-
-      if(bestArt && bestScore>=20){
-        const qtyFinal=bestArt.qty_final||0;
-        if(qtyFinal) setV(row,C.QTY_FINAL,qtyFinal);
-        if(bestArt.amount) setV(row,C.BALANCE,bestArt.amount);
-        if(ci) setV(row,C.COMM_INVOICE,ci);
-        if(extracted.etd_final){const d=parseD(extracted.etd_final);if(d)setV(row,C.ETD_FINAL,d);}
-        if(extracted.eta){const d=parseD(extracted.eta);if(d)setV(row,C.ETA,d);}
-        if(qpfi&&qtyFinal) setV(row,C.BALANCE2,Math.round(qtyFinal/qpfi*10000)/10000);
-        if(priceV&&qtyFinal) setV(row,C.MONTANT_FINAL,Math.round(priceV*qtyFinal*100)/100);
-        filled.push({row,ref:refV,color:colorV,gender:genderV,score:bestScore});
-        debugLog.push('    ✅ score='+bestScore+' QTY_FINAL='+qtyFinal+' CI='+ci);
-      } else {
-        notFound.push({row,ref:refV,color:colorV,reason:'score='+bestScore});
-        debugLog.push('    ⚠️ Pas de correspondance (best score='+bestScore+')');
+      if(!matched) {
+        debugLog.push('    ❌ Pas de match');
+        notFound.push({row,ref:refV,color:colorV});
       }
     }
+  }
+
   const outBuf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
   return {
     blob:new Blob([outBuf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
@@ -1191,220 +1209,6 @@ function addHist(type,ref,frs,arts,amt,cur,filled){
   const now=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   const tag=type==='PFI'?'<span class="bdg b-ok">PFI</span>':'<span class="bdg" style="background:var(--bbg);color:var(--blue)">CI/BL</span>';
   body.insertAdjacentHTML('afterbegin',`<tr><td>${now}</td><td>${tag}</td><td><strong>${ref}</strong></td><td>${frs}</td><td>${arts}</td><td>${cur||'USD'} ${Number(amt||0).toLocaleString('fr-FR',{minimumFractionDigits:2})}</td><td><span class="bdg b-ok">${filled} ligne(s)</span></td></tr>`);
-}
-
-// ══════════════════════════════════════════
-// MACRO VBA DOWNLOAD
-// ══════════════════════════════════════════
-function downloadMacro(){
-  const b64 = "JyA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0KJyBBUlRFWFRZTCDigJQgTWFjcm8gRXhwb3J0IFBERiB2MgonID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQoKU3ViIEV4cG9ydFBERl9GaWNoaWVyQWN0aWYoKQogICAgRGltIHdiIEFzIFdvcmtib29rCiAgICBEaW0gd3MgQXMgV29ya3NoZWV0CiAgICBEaW0gUERGUGF0aCBBcyBTdHJpbmcKICAgIERpbSBQSU51bWJlciBBcyBTdHJpbmcKICAgIERpbSBGb2xkZXJQYXRoIEFzIFN0cmluZwogICAgCiAgICBTZXQgd2IgPSBBY3RpdmVXb3JrYm9vawogICAgCiAgICAnIERlZmluaXIgem9uZXMgaW1wcmVzc2lvbiBzdXIgdG91cyBsZXMgb25nbGV0cwogICAgRm9yIEVhY2ggd3MgSW4gd2IuV29ya3NoZWV0cwogICAgICAgIElmIHdzLlVzZWRSYW5nZS5DZWxscy5Db3VudCA+IDEgVGhlbgogICAgICAgICAgICB3cy5QYWdlU2V0dXAuUHJpbnRBcmVhID0gd3MuVXNlZFJhbmdlLkFkZHJlc3MKICAgICAgICAgICAgd3MuUGFnZVNldHVwLlpvb20gPSBGYWxzZQogICAgICAgICAgICB3cy5QYWdlU2V0dXAuRml0VG9QYWdlc1dpZGUgPSAxCiAgICAgICAgICAgIHdzLlBhZ2VTZXR1cC5GaXRUb1BhZ2VzVGFsbCA9IEZhbHNlCiAgICAgICAgICAgIHdzLlBhZ2VTZXR1cC5PcmllbnRhdGlvbiA9IHhsTGFuZHNjYXBlCiAgICAgICAgRW5kIElmCiAgICBOZXh0IHdzCiAgICAKICAgICcgQ2hlcmNoZSBOwrAgUEkKICAgIFBJTnVtYmVyID0gVHJvdXZlck51bWVyb1BJKHdiKQogICAgCiAgICBJZiBQSU51bWJlciA9ICIiIFRoZW4KICAgICAgICBQSU51bWJlciA9IElucHV0Qm94KCJOwrAgUEkgbm9uIHRyb3V2w6kuIiAmIENocigxMykgJiAiRW50cmV6IGxlIE7CsCBQSSA6IiwgIk7CsCBQSSIsIF8KICAgICAgICAgICAgICAgICAgICAgICAgICAgTGVmdCh3Yi5OYW1lLCBJblN0clJldih3Yi5OYW1lLCAiLiIpIC0gMSkpCiAgICAgICAgSWYgUElOdW1iZXIgPSAiIiBUaGVuCiAgICAgICAgICAgIE1zZ0JveCAiRXhwb3J0IGFubnVsw6kuIiwgdmJFeGNsYW1hdGlvbgogICAgICAgICAgICBFeGl0IFN1YgogICAgICAgIEVuZCBJZgogICAgRW5kIElmCiAgICAKICAgIFBJTnVtYmVyID0gTmV0dG95ZXJOb21GaWNoaWVyKFBJTnVtYmVyKQogICAgRm9sZGVyUGF0aCA9IExlZnQod2IuRnVsbE5hbWUsIEluU3RyUmV2KHdiLkZ1bGxOYW1lLCAiXCIpKQogICAgUERGUGF0aCA9IEZvbGRlclBhdGggJiBQSU51bWJlciAmICIucGRmIgogICAgCiAgICAnIEV4cG9ydCBQREYKICAgIE9uIEVycm9yIEdvVG8gRXJyZXVyRXhwb3J0CiAgICB3Yi5FeHBvcnRBc0ZpeGVkRm9ybWF0IF8KICAgICAgICBUeXBlOj14bFR5cGVQREYsIF8KICAgICAgICBGaWxlTmFtZTo9UERGUGF0aCwgXwogICAgICAgIFF1YWxpdHk6PXhsUXVhbGl0eVN0YW5kYXJkLCBfCiAgICAgICAgSW5jbHVkZURvY1Byb3BlcnRpZXM6PVRydWUsIF8KICAgICAgICBJZ25vcmVQcmludEFyZWFzOj1GYWxzZSwgXwogICAgICAgIE9wZW5BZnRlclB1Ymxpc2g6PUZhbHNlCiAgICAKICAgICcgVmVyaWZpZXIgcXVlIGxlIGZpY2hpZXIgZXhpc3RlCiAgICBJZiBEaXIoUERGUGF0aCkgPD4gIiIgVGhlbgogICAgICAgIE1zZ0JveCAi4pyFIFBERiBjcsOpw6kgISIgJiBDaHIoMTMpICYgQ2hyKDEzKSAmIF8KICAgICAgICAgICAgICAgIk5vbSA6ICIgJiBQSU51bWJlciAmICIucGRmIiAmIENocigxMykgJiBfCiAgICAgICAgICAgICAgICJEb3NzaWVyIDogIiAmIEZvbGRlclBhdGgsIHZiSW5mb3JtYXRpb24sICJFeHBvcnQgUERGIEFydGV4dHlsIgogICAgRWxzZQogICAgICAgIE1zZ0JveCAi4pqg77iPIExlIGZpY2hpZXIgUERGIG4nYSBwYXMgw6l0w6kgY3LDqcOpLiIgJiBDaHIoMTMpICYgXwogICAgICAgICAgICAgICAiVsOpcmlmaWV6IHF1ZSBsZSBkb3NzaWVyIGV4aXN0ZSA6ICIgJiBGb2xkZXJQYXRoLCB2YkV4Y2xhbWF0aW9uCiAgICBFbmQgSWYKICAgIEV4aXQgU3ViCiAgICAKRXJyZXVyRXhwb3J0OgogICAgTXNnQm94ICLinYwgRXJyZXVyIDogIiAmIEVyci5EZXNjcmlwdGlvbiAmIENocigxMykgJiBDaHIoMTMpICYgXwogICAgICAgICAgICJDaGVtaW4gOiAiICYgUERGUGF0aCwgdmJDcml0aWNhbApFbmQgU3ViCgoKU3ViIEV4cG9ydFBERl9Eb3NzaWVyKCkKICAgIERpbSB3YiBBcyBXb3JrYm9vawogICAgRGltIHdzIEFzIFdvcmtzaGVldAogICAgRGltIEZpbGVQYXRoIEFzIFN0cmluZwogICAgRGltIEZvbGRlclBhdGggQXMgU3RyaW5nCiAgICBEaW0gUERGUGF0aCBBcyBTdHJpbmcKICAgIERpbSBQSU51bWJlciBBcyBTdHJpbmcKICAgIERpbSBDb21wdGV1ciBBcyBJbnRlZ2VyCiAgICBEaW0gRXJyZXVycyBBcyBTdHJpbmcKICAgIAogICAgV2l0aCBBcHBsaWNhdGlvbi5GaWxlRGlhbG9nKG1zb0ZpbGVEaWFsb2dGb2xkZXJQaWNrZXIpCiAgICAgICAgLlRpdGxlID0gIlPDqWxlY3Rpb25uZXogbGUgZG9zc2llciBjb250ZW5hbnQgbGVzIFBGSSBFeGNlbCIKICAgICAgICBJZiAuU2hvdyA8PiAtMSBUaGVuIEV4aXQgU3ViCiAgICAgICAgRm9sZGVyUGF0aCA9IC5TZWxlY3RlZEl0ZW1zKDEpCiAgICBFbmQgV2l0aAogICAgCiAgICBJZiBSaWdodChGb2xkZXJQYXRoLCAxKSA8PiAiXCIgVGhlbiBGb2xkZXJQYXRoID0gRm9sZGVyUGF0aCAmICJcIgogICAgCiAgICBDb21wdGV1ciA9IDAKICAgIEVycmV1cnMgPSAiIgogICAgRmlsZVBhdGggPSBEaXIoRm9sZGVyUGF0aCAmICIqLnhscyoiKQogICAgCiAgICBEbyBXaGlsZSBGaWxlUGF0aCA8PiAiIgogICAgICAgIElmIExlZnQoRmlsZVBhdGgsIDEpIDw+ICJ+IiBUaGVuCiAgICAgICAgICAgIE9uIEVycm9yIFJlc3VtZSBOZXh0CiAgICAgICAgICAgIFNldCB3YiA9IFdvcmtib29rcy5PcGVuKEZvbGRlclBhdGggJiBGaWxlUGF0aCwgUmVhZE9ubHk6PVRydWUpCiAgICAgICAgICAgIE9uIEVycm9yIEdvVG8gMAogICAgICAgICAgICAKICAgICAgICAgICAgSWYgTm90IHdiIElzIE5vdGhpbmcgVGhlbgogICAgICAgICAgICAgICAgJyBEZWZpbmlyIHpvbmVzIGltcHJlc3Npb24KICAgICAgICAgICAgICAgIEZvciBFYWNoIHdzIEluIHdiLldvcmtzaGVldHMKICAgICAgICAgICAgICAgICAgICBJZiB3cy5Vc2VkUmFuZ2UuQ2VsbHMuQ291bnQgPiAxIFRoZW4KICAgICAgICAgICAgICAgICAgICAgICAgd3MuUGFnZVNldHVwLlByaW50QXJlYSA9IHdzLlVzZWRSYW5nZS5BZGRyZXNzCiAgICAgICAgICAgICAgICAgICAgICAgIHdzLlBhZ2VTZXR1cC5ab29tID0gRmFsc2UKICAgICAgICAgICAgICAgICAgICAgICAgd3MuUGFnZVNldHVwLkZpdFRvUGFnZXNXaWRlID0gMQogICAgICAgICAgICAgICAgICAgICAgICB3cy5QYWdlU2V0dXAuRml0VG9QYWdlc1RhbGwgPSBGYWxzZQogICAgICAgICAgICAgICAgICAgICAgICB3cy5QYWdlU2V0dXAuT3JpZW50YXRpb24gPSB4bExhbmRzY2FwZQogICAgICAgICAgICAgICAgICAgIEVuZCBJZgogICAgICAgICAgICAgICAgTmV4dCB3cwogICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICBQSU51bWJlciA9IFRyb3V2ZXJOdW1lcm9QSSh3YikKICAgICAgICAgICAgICAgIElmIFBJTnVtYmVyID0gIiIgVGhlbgogICAgICAgICAgICAgICAgICAgIFBJTnVtYmVyID0gTGVmdChGaWxlUGF0aCwgSW5TdHJSZXYoRmlsZVBhdGgsICIuIikgLSAxKQogICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICBQSU51bWJlciA9IE5ldHRveWVyTm9tRmljaGllcihQSU51bWJlcikKICAgICAgICAgICAgICAgIFBERlBhdGggPSBGb2xkZXJQYXRoICYgUElOdW1iZXIgJiAiLnBkZiIKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgT24gRXJyb3IgUmVzdW1lIE5leHQKICAgICAgICAgICAgICAgIHdiLkV4cG9ydEFzRml4ZWRGb3JtYXQgXwogICAgICAgICAgICAgICAgICAgIFR5cGU6PXhsVHlwZVBERiwgXwogICAgICAgICAgICAgICAgICAgIEZpbGVOYW1lOj1QREZQYXRoLCBfCiAgICAgICAgICAgICAgICAgICAgUXVhbGl0eTo9eGxRdWFsaXR5U3RhbmRhcmQsIF8KICAgICAgICAgICAgICAgICAgICBJbmNsdWRlRG9jUHJvcGVydGllczo9VHJ1ZSwgXwogICAgICAgICAgICAgICAgICAgIElnbm9yZVByaW50QXJlYXM6PUZhbHNlLCBfCiAgICAgICAgICAgICAgICAgICAgT3BlbkFmdGVyUHVibGlzaDo9RmFsc2UKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgSWYgRXJyLk51bWJlciA8PiAwIFRoZW4KICAgICAgICAgICAgICAgICAgICBFcnJldXJzID0gRXJyZXVycyAmICItICIgJiBGaWxlUGF0aCAmIENocigxMykKICAgICAgICAgICAgICAgICAgICBFcnIuQ2xlYXIKICAgICAgICAgICAgICAgIEVsc2UKICAgICAgICAgICAgICAgICAgICBJZiBEaXIoUERGUGF0aCkgPD4gIiIgVGhlbiBDb21wdGV1ciA9IENvbXB0ZXVyICsgMQogICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICBPbiBFcnJvciBHb1RvIDAKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgd2IuQ2xvc2UgU2F2ZUNoYW5nZXM6PUZhbHNlCiAgICAgICAgICAgICAgICBTZXQgd2IgPSBOb3RoaW5nCiAgICAgICAgICAgIEVuZCBJZgogICAgICAgIEVuZCBJZgogICAgICAgIEZpbGVQYXRoID0gRGlyCiAgICBMb29wCiAgICAKICAgIERpbSBNZXNzYWdlIEFzIFN0cmluZwogICAgTWVzc2FnZSA9ICLinIUgVGVybWluw6kgISIgJiBDaHIoMTMpICYgQ2hyKDEzKSAmIENvbXB0ZXVyICYgIiBQREYgY3LDqcOpKHMpIGRhbnMgOiIgJiBDaHIoMTMpICYgRm9sZGVyUGF0aAogICAgSWYgRXJyZXVycyA8PiAiIiBUaGVuIE1lc3NhZ2UgPSBNZXNzYWdlICYgQ2hyKDEzKSAmIENocigxMykgJiAi4p2MIEVycmV1cnMgOiIgJiBDaHIoMTMpICYgRXJyZXVycwogICAgTXNnQm94IE1lc3NhZ2UsIHZiSW5mb3JtYXRpb24sICJFeHBvcnQgUERGIEFydGV4dHlsIgpFbmQgU3ViCgoKRnVuY3Rpb24gVHJvdXZlck51bWVyb1BJKHdiIEFzIFdvcmtib29rKSBBcyBTdHJpbmcKICAgIERpbSB3cyBBcyBXb3Jrc2hlZXQKICAgIERpbSB2YWxldXIgQXMgU3RyaW5nCiAgICBEaW0gcmVzdWx0IEFzIFN0cmluZwogICAgcmVzdWx0ID0gIiIKICAgIAogICAgRm9yIEVhY2ggd3MgSW4gd2IuV29ya3NoZWV0cwogICAgICAgIERpbSBtYXhSb3cgQXMgTG9uZywgbWF4Q29sIEFzIExvbmcKICAgICAgICBtYXhSb3cgPSBBcHBsaWNhdGlvbi5Xb3Jrc2hlZXRGdW5jdGlvbi5NaW4oNTAsIHdzLlVzZWRSYW5nZS5Sb3dzLkNvdW50KQogICAgICAgIG1heENvbCA9IEFwcGxpY2F0aW9uLldvcmtzaGVldEZ1bmN0aW9uLk1pbigzMCwgd3MuVXNlZFJhbmdlLkNvbHVtbnMuQ291bnQpCiAgICAgICAgCiAgICAgICAgRGltIGkgQXMgTG9uZywgaiBBcyBMb25nCiAgICAgICAgRm9yIGkgPSAxIFRvIG1heFJvdwogICAgICAgICAgICBGb3IgaiA9IDEgVG8gbWF4Q29sCiAgICAgICAgICAgICAgICB2YWxldXIgPSBUcmltKENTdHIod3MuQ2VsbHMoaSwgaikuVmFsdWUpKQogICAgICAgICAgICAgICAgCiAgICAgICAgICAgICAgICBJZiBJblN0cihVQ2FzZSh2YWxldXIpLCAiUEkgTk8iKSA+IDAgVGhlbgogICAgICAgICAgICAgICAgICAgIElmIGogKyAxIDw9IG1heENvbCBUaGVuCiAgICAgICAgICAgICAgICAgICAgICAgIERpbSB2b2lzaW4gQXMgU3RyaW5nCiAgICAgICAgICAgICAgICAgICAgICAgIHZvaXNpbiA9IFRyaW0oQ1N0cih3cy5DZWxscyhpLCBqICsgMSkuVmFsdWUpKQogICAgICAgICAgICAgICAgICAgICAgICBJZiBMZW4odm9pc2luKSA+PSA0IEFuZCBJblN0cih2b2lzaW4sICIgIikgPSAwIFRoZW4KICAgICAgICAgICAgICAgICAgICAgICAgICAgIHJlc3VsdCA9IHZvaXNpbgogICAgICAgICAgICAgICAgICAgICAgICAgICAgR29UbyBUcm91dmUKICAgICAgICAgICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICAgICAgSWYgSW5TdHIodmFsZXVyLCAiOiIpID4gMCBUaGVuCiAgICAgICAgICAgICAgICAgICAgICAgIERpbSBwYXJ0cygpIEFzIFN0cmluZwogICAgICAgICAgICAgICAgICAgICAgICBwYXJ0cyA9IFNwbGl0KHZhbGV1ciwgIjoiKQogICAgICAgICAgICAgICAgICAgICAgICBJZiBVQm91bmQocGFydHMpID49IDEgVGhlbgogICAgICAgICAgICAgICAgICAgICAgICAgICAgRGltIHBpVmFsIEFzIFN0cmluZwogICAgICAgICAgICAgICAgICAgICAgICAgICAgcGlWYWwgPSBUcmltKHBhcnRzKFVCb3VuZChwYXJ0cykpKQogICAgICAgICAgICAgICAgICAgICAgICAgICAgSWYgTGVuKHBpVmFsKSA+PSA0IFRoZW4KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICByZXN1bHQgPSBwaVZhbAogICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIEdvVG8gVHJvdXZlCiAgICAgICAgICAgICAgICAgICAgICAgICAgICBFbmQgSWYKICAgICAgICAgICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICBFbmQgSWYKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgSWYgTGVmdChVQ2FzZSh2YWxldXIpLCA0KSA9ICJTVUFNIiBBbmQgTGVuKHZhbGV1cikgPj0gOCBUaGVuCiAgICAgICAgICAgICAgICAgICAgcmVzdWx0ID0gdmFsZXVyOiBHb1RvIFRyb3V2ZQogICAgICAgICAgICAgICAgRW5kIElmCiAgICAgICAgICAgICAgICBJZiBMZWZ0KFVDYXNlKHZhbGV1ciksIDQpID0gIk5TUi8iIEFuZCBMZW4odmFsZXVyKSA+PSA4IFRoZW4KICAgICAgICAgICAgICAgICAgICByZXN1bHQgPSB2YWxldXI6IEdvVG8gVHJvdXZlCiAgICAgICAgICAgICAgICBFbmQgSWYKICAgICAgICAgICAgICAgIElmIExlZnQoVUNhc2UodmFsZXVyKSwgMikgPSAiUUciIEFuZCBMZW4odmFsZXVyKSA+PSA4IFRoZW4KICAgICAgICAgICAgICAgICAgICByZXN1bHQgPSB2YWxldXI6IEdvVG8gVHJvdXZlCiAgICAgICAgICAgICAgICBFbmQgSWYKICAgICAgICAgICAgTmV4dCBqCiAgICAgICAgTmV4dCBpCiAgICBOZXh0IHdzCiAgICAKVHJvdXZlOgogICAgVHJvdXZlck51bWVyb1BJID0gcmVzdWx0CkVuZCBGdW5jdGlvbgoKCkZ1bmN0aW9uIE5ldHRveWVyTm9tRmljaGllcihub20gQXMgU3RyaW5nKSBBcyBTdHJpbmcKICAgIERpbSByZXN1bHQgQXMgU3RyaW5nCiAgICByZXN1bHQgPSBub20KICAgIHJlc3VsdCA9IFJlcGxhY2UocmVzdWx0LCAiLyIsICItIikKICAgIHJlc3VsdCA9IFJlcGxhY2UocmVzdWx0LCAiXCIsICItIikKICAgIHJlc3VsdCA9IFJlcGxhY2UocmVzdWx0LCAiOiIsICItIikKICAgIHJlc3VsdCA9IFJlcGxhY2UocmVzdWx0LCAiKiIsICIiKQogICAgcmVzdWx0ID0gUmVwbGFjZShyZXN1bHQsICI/IiwgIiIpCiAgICByZXN1bHQgPSBSZXBsYWNlKHJlc3VsdCwgIiIiIiwgIiIpCiAgICByZXN1bHQgPSBSZXBsYWNlKHJlc3VsdCwgIjwiLCAiIikKICAgIHJlc3VsdCA9IFJlcGxhY2UocmVzdWx0LCAiPiIsICIiKQogICAgcmVzdWx0ID0gUmVwbGFjZShyZXN1bHQsICJ8IiwgIi0iKQogICAgTmV0dG95ZXJOb21GaWNoaWVyID0gVHJpbShyZXN1bHQpCkVuZCBGdW5jdGlvbgo=";
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for(let i=0;i<binary.length;i++) bytes[i]=binary.charCodeAt(i);
-  const blob = new Blob([bytes], {type:'text/plain;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'Artextyl_ExportPDF.bas';
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(url), 3000);
-}
-
-// ══════════════════════════════════════════
-// EXCEL → PDF CONVERSION
-// ══════════════════════════════════════════
-const excelPdfFiles = [];
-let generatedPdfBlob = null;
-
-function addExcelFiles(input){
-  const files = Array.from(input.files);
-  files.forEach(f => {
-    const id = 'epdf_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
-    excelPdfFiles.push({file:f, id});
-    const list = document.getElementById('excel-pdf-list');
-    const size = f.size > 1024*1024 ? (f.size/1024/1024).toFixed(1)+'MB' : (f.size/1024).toFixed(0)+'KB';
-    const div = document.createElement('div');
-    div.className = 'pfi-item';
-    div.id = 'epdf-item-'+id;
-    div.innerHTML = `<span style="font-size:16px">📊</span>
-      <span class="pfi-item-name">${f.name}</span>
-      <span class="pfi-item-size">${size}</span>
-      <button class="pfi-item-del" onclick="removeExcelPdfFile('${id}')" title="Supprimer">✕</button>`;
-    list.appendChild(div);
-  });
-  input.value = '';
-  checkPdfBtn();
-}
-
-function removeExcelPdfFile(id){
-  const idx = excelPdfFiles.findIndex(f=>f.id===id);
-  if(idx>=0) excelPdfFiles.splice(idx,1);
-  const el = document.getElementById('epdf-item-'+id);
-  if(el) el.remove();
-  checkPdfBtn();
-}
-
-function checkPdfBtn(){
-  document.getElementById('btn-pdf-convert').disabled = excelPdfFiles.length === 0;
-}
-
-function resetPdfTool(){
-  excelPdfFiles.length = 0;
-  document.getElementById('excel-pdf-list').innerHTML = '';
-  document.getElementById('pdf-pi-number').value = '';
-  document.getElementById('res-pdf').classList.remove('show');
-  hideSt('st-pdf');
-  generatedPdfBlob = null;
-  checkPdfBtn();
-}
-
-async function convertExcelToPDF(){
-  document.getElementById('btn-pdf-convert').disabled = true;
-  document.getElementById('res-pdf').classList.remove('show');
-  showSt('st-pdf','info','Lecture des fichiers Excel...',true);
-
-  try{
-    // Load jsPDF dynamically
-    if(!window.jspdf){
-      showSt('st-pdf','info','Chargement des bibliothèques...',true);
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
-    }
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
-    let isFirstPage = true;
-    let pageCount = 0;
-    const piNumber = document.getElementById('pdf-pi-number').value.trim();
-
-    for(let fi=0; fi<excelPdfFiles.length; fi++){
-      const {file} = excelPdfFiles[fi];
-      showSt('st-pdf','info',`Traitement de ${file.name}...`,true);
-
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, {type:'array', cellDates:true});
-
-      // Process each sheet
-      for(let si=0; si<wb.SheetNames.length; si++){
-        const sheetName = wb.SheetNames[si];
-        const ws = wb.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-
-        if(!data || data.length === 0) continue;
-
-        // Skip empty sheets
-        const hasData = data.some(row => row.some(cell => cell !== ''));
-        if(!hasData) continue;
-
-        // Add new page (except for very first)
-        if(!isFirstPage){
-          doc.addPage();
-        }
-        isFirstPage = false;
-        pageCount++;
-
-        // Page header
-        const pageTitle = wb.SheetNames.length > 1 
-          ? `${file.name.replace(/\.(xlsx|xls)$/i,'')} — ${sheetName}`
-          : file.name.replace(/\.(xlsx|xls)$/i,'');
-        
-        doc.setFontSize(9);
-        doc.setTextColor(100);
-        doc.text(pageTitle, 10, 8);
-        if(piNumber){
-          doc.setFontSize(10);
-          doc.setTextColor(20);
-          doc.setFont(undefined,'bold');
-          doc.text('N° PI: '+piNumber, 200, 8, {align:'right'});
-          doc.setFont(undefined,'normal');
-        }
-        doc.setTextColor(0);
-
-        // Filter out completely empty rows
-        const cleanData = data.filter(row => row.some(cell => String(cell).trim() !== ''));
-        if(cleanData.length === 0) continue;
-
-        // Build table - first row as header if it looks like a header
-        const headers = cleanData[0].map(h => String(h||''));
-        const rows = cleanData.slice(1).map(row => 
-          headers.map((_, i) => {
-            const val = row[i];
-            if(val instanceof Date) return val.toLocaleDateString('fr-FR');
-            return String(val||'');
-          })
-        );
-
-        // Auto-size columns
-        doc.autoTable({
-          head: [headers],
-          body: rows,
-          startY: 12,
-          styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
-          headStyles: { fillColor: [26,25,22], textColor: 255, fontStyle: 'bold', fontSize: 7 },
-          alternateRowStyles: { fillColor: [248,247,244] },
-          margin: { left: 8, right: 8 },
-          tableWidth: 'auto',
-          theme: 'grid',
-          didDrawPage: function(d){
-            // Footer with page number
-            doc.setFontSize(7);
-            doc.setTextColor(150);
-            doc.text(
-              `Page ${doc.internal.getCurrentPageInfo().pageNumber}`,
-              doc.internal.pageSize.width/2, 
-              doc.internal.pageSize.height-5,
-              {align:'center'}
-            );
-          }
-        });
-      }
-    }
-
-    if(pageCount === 0){
-      throw new Error('Aucune donnée trouvée dans les fichiers Excel.');
-    }
-
-    // Generate blob
-    const pdfName = piNumber ? piNumber+'.pdf' : excelPdfFiles[0].file.name.replace(/\.(xlsx|xls)$/i,'.pdf');
-    generatedPdfBlob = doc.output('blob');
-
-    // Show result
-    document.getElementById('pdf-preview').innerHTML = `
-      <div style="padding:12px;background:var(--gbg);border:1px solid var(--gbd);border-radius:8px;font-size:13px">
-        <strong style="color:var(--green)">✅ PDF créé avec succès</strong><br>
-        <small style="color:var(--t2)">
-          📄 ${pageCount} page(s) · 
-          📊 ${excelPdfFiles.length} fichier(s) Excel · 
-          📁 Nom: <strong>${pdfName}</strong>
-        </small>
-      </div>`;
-    document.getElementById('btn-dl-pdf').setAttribute('data-name', pdfName);
-    document.getElementById('res-pdf').classList.add('show');
-    showSt('st-pdf','ok',`✅ PDF généré — ${pageCount} page(s)`);
-
-  }catch(e){
-    showSt('st-pdf','err','⚠ Erreur: '+e.message);
-  } finally {
-    document.getElementById('btn-pdf-convert').disabled = false;
-    checkPdfBtn();
-  }
-}
-
-function downloadPDF(){
-  if(!generatedPdfBlob) return;
-  const name = document.getElementById('btn-dl-pdf').getAttribute('data-name') || 'export.pdf';
-  const url = URL.createObjectURL(generatedPdfBlob);
-  const a = document.createElement('a'); a.href=url; a.download=name; a.click();
-  setTimeout(()=>URL.revokeObjectURL(url),3000);
-}
-
-function loadScript(src){
-  return new Promise((res,rej)=>{
-    if(document.querySelector(`script[src="${src}"]`)){ res(); return; }
-    const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej;
-    document.head.appendChild(s);
-  });
 }
 
 // ══════════════════════════════════════════
