@@ -682,32 +682,42 @@ JSON compact - retourne UNIQUEMENT ce JSON sans markdown:
 
 const SYS_CI = `Tu es expert en commerce international textile. Analyse ces documents shipping (Weight Note, CI, PL, BL).
 
-🔴 RÈGLE CRITIQUE — EXTRAIRE PAR COULEUR:
-Le Weight Note liste les quantités PAR COULEUR pour CHAQUE RÉFÉRENCE.
-Tu DOIS extraire UNE LIGNE PAR COULEUR, pas un total.
+🔴🔴🔴 RÈGLE OBLIGATOIRE CRITIQUE — EXTRAIRE UNE LIGNE PAR COULEUR 🔴🔴🔴
 
-Exemple Weight Note:
-  RICHYWOOD MEN 068:
-    - BLACK = 500
-    - DARK GREY = 800
-    - NAVY = 600
-    - RED = 548
-  Total RICHYWOOD = 2448
+LE WEIGHT NOTE DÉTAILLE LES QUANTITÉS PAR COULEUR.
+TU DOIS CRÉER UNE LIGNE JSON SÉPARÉE POUR CHAQUE COULEUR.
+PAS DE TOTAUX. CHAQUE COULEUR = UNE LIGNE.
 
-Tu dois extraire 4 articles séparés (un par couleur):
+EXEMPLE RÉEL:
+Weight Note reçu:
+  RICHYWOOD MEN 068 - 2448 total:
+    BLACK line 1: 500
+    DARK GREY line 2: 800
+    NAVY line 3: 600
+    RED line 4: 548
+    TOTAL = 2448
+
+EXTRACTION OBLIGATOIRE (4 articles, pas 1):
   {"ref_key":"RICHYWOOD", "gender":"MEN", "color":"BLACK", "qty_final":500},
   {"ref_key":"RICHYWOOD", "gender":"MEN", "color":"DARK GREY", "qty_final":800},
   {"ref_key":"RICHYWOOD", "gender":"MEN", "color":"NAVY", "qty_final":600},
   {"ref_key":"RICHYWOOD", "gender":"MEN", "color":"RED", "qty_final":548}
 
-RÈGLES D'EXTRACTION:
-1. Lis CHAQUE LIGNE du Weight Note (pas juste les totaux par style)
-2. Identifie la couleur POUR CHAQUE QUANTITÉ
-3. ref_key = style SANS codes/gender/marques (ex: RICHYWOOD, TOXIQUE, ROYAUTE)
-4. gender = MEN/LADY/BOY/GIRL
-5. color = couleur EXACTE (BLACK, DARK GREY, NAVY, RED, etc.)
-6. qty_final = quantité SPÉCIFIQUE pour cette couleur
-7. Si une ligne du Weight Note n'a pas de couleur visible, essaie de la déduire du style complet
+SI TU EXTRAIS SEULEMENT {"ref_key":"RICHYWOOD", "qty_final":2448} = ERREUR GRAVE
+
+RÈGLES STRICTES:
+1. CHAQUE COULEUR DIFFÉRENTE = UNE LIGNE DANS LE JSON
+2. MÊME ref_key + MÊME gender + COULEUR DIFFÉRENTE = ARTICLE DIFFÉRENT
+3. Lis le Weight Note ligne par ligne (cherche les détails par couleur)
+4. ref_key = style/référence SANS codes numériques/gender/marques
+5. gender = MEN/LADY/BOY/GIRL (exact du document)
+6. color = couleur EXACTE (BLACK, DARK GREY, NAVY, RED, GREY/GREEN, etc.)
+7. qty_final = quantité SPÉCIFIQUE pour cette couleur UNIQUEMENT
+8. TOTAL DE TOUTES LES COULEURS D'UN STYLE doit égaler le total du Weight Note
+
+VALIDATION FINALE:
+- Compte le nombre de lignes par ref_key: si "RICHYWOOD" = 4 couleurs → 4 articles
+- Si tu as seulement 1 article pour RICHYWOOD → MAUVAIS, recommence
 
 Retourne UNIQUEMENT ce JSON valide sans markdown:
 {"ci_numero":"","ci_date":"","booking":"","vessel":"","port_loading":"","port_discharge":"","etd_final":"","eta":"","container":"","seal":"","articles":[{"ref_key":"","gender":"","color":"","qty_final":0,"unit_price":0,"amount":0,"ctns":0}],"total_qty":0,"total_ctns":0,"total_amount":0,"gross_weight":0,"net_weight":0,"cbm":0,"currency":"USD","checks":{"qty_wn_ci_match":true,"weight_bl_match":true,"booking_consistent":true}}`;
